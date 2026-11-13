@@ -1,0 +1,72 @@
+# 每 6 小时自动拉一次四个大区的价格数据，重新生成网页并发布到 GitHub Pages。
+# 数据不存进仓库（避免仓库越来越大），每次直接随网页一起发布。
+name: 更新价格并发布网页
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # 每 6 小时一次（北京时间 2/8/14/20 点 17 分左右，GitHub 高峰期可能晚几十分钟）
+  workflow_dispatch:          # 也可以在 GitHub 网页上手动点“Run workflow”立即更新
+  push:
+    branches: [main]
+    paths: ["index.html", "build_data.py", ".github/workflows/update.yml"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 游戏数据表（配方、物品）每周刷新一次，平时用缓存
+      - name: 计算本周编号
+        id: week
+        run: echo "id=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: gamedata
+          key: gamedata-${{ steps.week.outputs.id }}
+
+      - name: 拉取四个大区的价格（同时进行）
+        run: |
+          for dc in 陆行鸟 莫古力 猫小胖 豆豆柴; do
+            python build_data.py "$dc" > "build_$dc.log" 2>&1 &
+          done
+          wait || true
+          for f in build_*.log; do echo "== $f"; grep -v "重试" "$f" | tail -n 3; done
+          ls -la data
+
+      - name: 检查至少有一个大区成功
+        run: ls data/*.js
+
+      - name: 组装网页
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -r data _site/data
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

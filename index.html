@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>今天搓什么能赚钱</title>
+<meta name="description" content="FF14 国服生产职业赚钱推荐：材料便宜、成品好卖、最近真有人买。">
+<style>
+  :root {
+    --bg: #f6f4ef;
+    --panel: #ffffff;
+    --ink: #22201c;
+    --muted: #77736a;
+    --line: #e6e1d6;
+    --accent: #b8862b;
+    --accent-soft: #f4ead6;
+    --good: #2f8f5b;
+    --good-soft: #e4f3ea;
+    --hq: #2f6fb3;
+    --warn: #b5532f;
+    --chip: #efebe2;
+    --shadow: 0 1px 2px rgba(40, 30, 10, 0.06), 0 4px 16px rgba(40, 30, 10, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --panel: #1f2126; --ink: #ebe8e1; --muted: #9b978d; --line: #2e3138;
+      --accent: #e0b25a; --accent-soft: #3a3020; --good: #6fcf97; --good-soft: #1f3328;
+      --hq: #7fb5ff; --warn: #ff9a73; --chip: #2a2c32; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.55 "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 16px 60px; }
+  header h1 { margin: 0; font-size: 28px; letter-spacing: 1px; }
+  header h1 span { color: var(--accent); }
+  header p { margin: 6px 0 0; color: var(--muted); }
+
+  .tabs { display: flex; gap: 6px; margin: 22px 0 12px; flex-wrap: wrap; }
+  .tab {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 7px 16px; border-radius: 999px; cursor: pointer; font: inherit;
+  }
+  .tab.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+
+  .filters {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; display: grid; gap: 10px; box-shadow: var(--shadow);
+  }
+  .frow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .frow > label.k { color: var(--muted); font-size: 13px; min-width: 6.5em; }
+  .chip {
+    border: 1px solid transparent; background: var(--chip); color: var(--ink);
+    padding: 3px 10px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 13px;
+  }
+  .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: bold; }
+  .check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+
+  .summary { margin: 16px 2px 10px; color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+  .list { display: grid; gap: 10px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; box-shadow: var(--shadow);
+  }
+  .top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .name { font-size: 16px; font-weight: bold; }
+  .name a { color: inherit; text-decoration: none; }
+  .name a:hover { text-decoration: underline; }
+  .badges { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
+  .b { font-size: 12px; padding: 0 7px; border-radius: 4px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+  .b.hq { background: transparent; border: 1px solid var(--hq); color: var(--hq); }
+  .b.scarce { background: var(--good-soft); color: var(--good); }
+  .b.book { background: var(--accent-soft); color: var(--accent); }
+  .b.old { color: var(--warn); }
+  .profit { text-align: right; flex: none; }
+  .profit .v { font-size: 20px; font-weight: bold; color: var(--good); font-variant-numeric: tabular-nums; }
+  .profit .l { font-size: 12px; color: var(--muted); }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px;
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line);
+  }
+  .stat .l { font-size: 12px; color: var(--muted); }
+  .stat .v { font-variant-numeric: tabular-nums; font-weight: bold; }
+  .bar { height: 4px; background: var(--chip); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--good); }
+
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .ings { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+  .ings li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .ings li .a { color: var(--muted); }
+
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; }
+  .more { display: block; margin: 14px auto 0; }
+  footer { margin-top: 30px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+  footer a { color: inherit; }
+
+  @media (max-width: 640px) {
+    header h1 { font-size: 23px; }
+    .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .frow > label.k { min-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>今天<span>搓什么</span>能赚钱</h1>
+    <p>材料在市场上就能买齐、成本远低于售价、最近真有人在买的生产配方。</p>
+  </header>
+
+  <nav class="tabs" id="dcTabs"></nav>
+
+  <section class="filters">
+    <div class="frow">
+      <label class="k">材料成本 ≤ 售价</label>
+      <span id="fRatio"></span>
+    </div>
+    <div class="frow">
+      <label class="k">每天至少卖出</label>
+      <span id="fVel"></span>
+    </div>
+    <div class="frow">
+      <label class="k">职业</label>
+      <span id="fJob"></span>
+    </div>
+    <div class="frow">
+      <label class="k">排序</label>
+      <span id="fSort"></span>
+    </div>
+    <div class="frow">
+      <label class="k">其他</label>
+      <label class="check"><input type="checkbox" id="fNoBook"> 隐藏需要秘籍的配方</label>
+      <label class="check"><input type="checkbox" id="fFresh"> 只看 3 天内有更新的数据</label>
+    </div>
+  </section>
+
+  <div class="summary"><span id="count"></span><span id="gen"></span></div>
+  <div class="list" id="list"></div>
+  <button class="tab more" id="more" hidden>显示更多</button>
+
+  <footer>
+    · 价格和销量来自玩家共享的 <a href="https://universalis.app" target="_blank" rel="noopener">Universalis</a>，数据靠玩家上传，可能有延迟，下手前请在游戏里市场板确认。<br>
+    · 售价 = 最近 30 天成交价的中位数；如果现在有人挂得更低，按更低的算。能做高品质（HQ）的按 HQ 成交算。<br>
+    · 材料成本按“做 3 次”的量，从最便宜的挂单开始买够计算，避免被个别超低价挂单误导。<br>
+    · 单件利润已扣除 5% 市场税。“市场缺货”表示目前没人在卖，可能是稀缺货。
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const DCS = ['陆行鸟', '莫古力', '猫小胖', '豆豆柴'];
+  const JOBS = ['全部', '木工', '锻冶', '铸甲', '雕金', '制革', '裁缝', '炼金', '烹调'];
+  const RATIOS = [0.05, 0.1, 0.2, 0.3, 0.5];
+  const VELS = [0, 0.5, 1, 3, 10];
+  const SORTS = [
+    ['profit', '单件利润'],
+    ['daily', '每天能赚（利润×日销）'],
+    ['ratio', '成本占比最低'],
+    ['vel', '卖得最快'],
+  ];
+  const PAGE = 40;
+
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('craft.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('craft.' + k, JSON.stringify(v)); } catch (e) {} },
+  };
+  const S = {
+    dc: store.get('dc', '猫小胖'),
+    ratio: store.get('ratio', 0.1),
+    vel: store.get('vel', 1),
+    job: store.get('job', '全部'),
+    sort: store.get('sort', 'profit'),
+    noBook: store.get('noBook', false),
+    fresh: store.get('fresh', false),
+    shown: PAGE,
+  };
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fmt = n => Math.round(n).toLocaleString('zh-CN');
+  const pct = r => {
+    const v = r * 100;
+    return (v >= 10 || Number.isInteger(Math.round(v * 10) / 10) && Math.round(v * 10) % 10 === 0 ? Math.round(v) : v.toFixed(1)) + '%';
+  };
+  function ago(ms) {
+    if (!ms) return '未知';
+    const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+    if (m < 60) return m + ' 分钟前';
+    const h = Math.round(m / 60);
+    if (h < 48) return h + ' 小时前';
+    return Math.round(h / 24) + ' 天前';
+  }
+
+  let names = {};
+  const cache = {};
+
+  function chips(el, opts, cur, onPick) {
+    el.innerHTML = '';
+    opts.forEach(([v, label]) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (v === cur ? ' on' : '');
+      b.textContent = label;
+      b.onclick = () => onPick(v);
+      el.appendChild(b);
+    });
+  }
+  function drawControls() {
+    const tabs = $('dcTabs'); tabs.innerHTML = '';
+    DCS.forEach(dc => {
+      const b = document.createElement('button');
+      b.className = 'tab' + (dc === S.dc ? ' on' : '');
+      b.textContent = dc;
+      b.onclick = () => set('dc', dc);
+      tabs.appendChild(b);
+    });
+    chips($('fRatio'), RATIOS.map(r => [r, pct(r)]), S.ratio, v => set('ratio', v));
+    chips($('fVel'), VELS.map(v => [v, v === 0 ? '不限' : v + ' 个']), S.vel, v => set('vel', v));
+    chips($('fJob'), JOBS.map(j => [j, j]), S.job, v => set('job', v));
+    chips($('fSort'), SORTS, S.sort, v => set('sort', v));
+    $('fNoBook').checked = S.noBook;
+    $('fFresh').checked = S.fresh;
+  }
+  function set(k, v) {
+    S[k] = v; store.set(k, v); S.shown = PAGE;
+    drawControls();
+    if (k === 'dc') load(); else render();
+  }
+  $('fNoBook').onchange = e => set('noBook', e.target.checked);
+  $('fFresh').onchange = e => set('fresh', e.target.checked);
+  $('more').onclick = () => { S.shown += PAGE; render(); };
+
+  // 用 <script> 加载数据：直接双击打开网页（file://）和放到网站上都能用
+  function loadScript(src) {
+    return new Promise((ok, fail) => {
+      const s = document.createElement('script');
+      s.src = src + '?t=' + Math.floor(Date.now() / 600000); // 每 10 分钟换一次，避免浏览器一直用旧数据
+      s.onload = ok;
+      s.onerror = () => fail(new Error('还没有这个大区的数据'));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function load() {
+    $('list').innerHTML = '<div class="empty">正在加载 ' + esc(S.dc) + ' 的数据…</div>';
+    try {
+      if (!cache[S.dc]) {
+        const want = S.dc;
+        await loadScript('data/' + encodeURIComponent(want) + '.js');
+        cache[want] = (window.CRAFT_DATA || {})[want];
+        if (!cache[want]) throw new Error('数据文件格式不对');
+        if (want !== S.dc) return;
+      }
+      render();
+    } catch (e) {
+      $('list').innerHTML = '<div class="empty">加载失败：' + esc(e.message) + '</div>';
+      $('count').textContent = ''; $('gen').textContent = '';
+    }
+  }
+
+  function filtered() {
+    const d = cache[S.dc]; if (!d) return [];
+    const freshCut = Date.now() - 3 * 86400000;
+    let rows = d.rows.filter(x =>
+      x.ratio <= S.ratio &&
+      x.vel >= S.vel &&
+      (S.job === '全部' || x.job === S.job) &&
+      (!S.noBook || !x.book) &&
+      (!S.fresh || (x.upd || 0) >= freshCut));
+    // 同一个成品可能有好几个职业都能做：合并成一张卡片，保留成本最低的配方
+    const byItem = new Map();
+    rows.forEach(x => {
+      const cur = byItem.get(x.item);
+      if (!cur) { byItem.set(x.item, { ...x, jobs: [x.job] }); return; }
+      cur.jobs.push(x.job);
+      if (x.cost < cur.cost) Object.assign(cur, x, { jobs: cur.jobs });
+    });
+    rows = [...byItem.values()];
+    const key = {
+      profit: x => -x.profit,
+      daily: x => -(x.profit * x.vel),
+      ratio: x => x.ratio,
+      vel: x => -x.vel,
+    }[S.sort];
+    return rows.sort((a, b) => key(a) - key(b));
+  }
+
+  function card(x) {
+    const n = names[x.item] || ('#' + x.item);
+    const stars = x.st ? '★'.repeat(x.st) : '';
+    const old = (Date.now() - (x.upd || 0)) > 3 * 86400000;
+    const badges = [
+      `<span class="b">${esc((x.jobs || [x.job]).join(' / '))} ${x.lv}级${stars}</span>`,
+      x.q === 'hq' ? '<span class="b hq">按 HQ 售价</span>' : '',
+      x.n > 1 ? `<span class="b">一次出 ${x.n} 个</span>` : '',
+      !x.listed ? '<span class="b scarce">市场缺货</span>' : '',
+      x.book ? `<span class="b book">需要${esc(x.book)}</span>` : '',
+      x.sp ? '<span class="b book">需要专家认证</span>' : '',
+      x.ex ? '<span class="b">高难度配方</span>' : '',
+      old ? `<span class="b old">数据 ${ago(x.upd)}</span>` : '',
+    ].join('');
+    const ings = x.ings.map(([id, amt, p]) =>
+      `<li><span>${esc(names[id] || '#' + id)}</span><span class="a">${fmt(p)} × ${amt}</span><span>${fmt(p * amt)}</span></li>`).join('');
+    return `<article class="card">
+      <div class="top">
+        <div>
+          <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a></div>
+          <div class="badges">${badges}</div>
+        </div>
+        <div class="profit"><div class="v">+${fmt(x.profit)}</div><div class="l">单件利润</div></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="l">售价</div><div class="v">${fmt(x.price)}</div></div>
+        <div class="stat"><div class="l">材料成本</div><div class="v">${fmt(x.cost)}</div></div>
+        <div class="stat"><div class="l">成本占比</div><div class="v">${pct(x.ratio)}</div><div class="bar"><i style="width:${Math.min(100, x.ratio * 100 * 2)}%"></i></div></div>
+        <div class="stat"><div class="l">每天卖出</div><div class="v">${x.vel >= 10 ? Math.round(x.vel) : x.vel.toFixed(1)} 个</div></div>
+        <div class="stat"><div class="l">最近成交</div><div class="v">${ago(x.lastSale)}</div></div>
+      </div>
+      <details><summary>材料清单${x.onSale ? ` · 市场上还有 ${fmt(x.onSale)} 个在卖` : ''}</summary><ul class="ings">${ings}</ul></details>
+    </article>`;
+  }
+
+  function render() {
+    const d = cache[S.dc]; if (!d) return;
+    names = d.names || {};
+    const rows = filtered();
+    $('count').textContent = `${S.dc}：找到 ${rows.length} 个配方`;
+    $('gen').textContent = `数据生成于 ${ago(d.generated)}`;
+    $('list').innerHTML = rows.length
+      ? rows.slice(0, S.shown).map(card).join('')
+      : '<div class="empty">这个条件下暂时没有合适的配方，试试放宽“材料成本”或“每天卖出”的条件。</div>';
+    $('more').hidden = rows.length <= S.shown;
+  }
+
+  drawControls();
+  load();
+})();
+</script>
+</body>
+</html>
