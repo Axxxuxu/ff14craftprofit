@@ -23,7 +23,9 @@ GAMEDATA = os.path.join(HERE, "gamedata")
 OUT = os.path.join(HERE, "data")
 
 DATA_REPO = "https://raw.githubusercontent.com/thewakingsands/ffxiv-datamining-cn/master/"
-TABLES = ["Item", "Recipe", "RecipeLevelTable", "CraftType", "SecretRecipeBook"]
+TABLES = ["Item", "Recipe", "RecipeLevelTable", "CraftType", "SecretRecipeBook",
+          "GatheringItem", "GatheringItemLevelConvertTable", "GatheringPointBase", "GatheringPoint",
+          "GatheringPointTransient", "GatheringSubCategory", "TerritoryType", "PlaceName"]
 DCS = ["陆行鸟", "莫古力", "猫小胖", "豆豆柴"]
 UA = {"User-Agent": "today-craft-profit/1.0"}
 
@@ -233,19 +235,23 @@ def real_sell(detail, prefer_hq):
             "vel": vel,
             "lastSale": max(h["timestamp"] for h in hs) * 1000,
             "onSale": sum(x["quantity"] for x in listed),
+            # 网站最多返回 40 条挂单；满 40 条说明实际在卖的更多
+            "capped": len(detail.get("listings") or []) >= 40,
             "sales": len(hs),
         }
     return None
 
 
-def refine(dc, rows, items, recipes_by_id):
-    """第二轮：对候选配方用挂单明细和成交记录重算"""
+def craft_detail_ids(rows):
     ids = set()
     for x in rows:
         ids.add(x["item"])
         ids.update(i for i, _, _ in x["ings"])
-    log("  %s: 复查 %d 个候选，涉及物品 %d 种" % (dc, len(rows), len(ids)))
-    D = fetch_detail(dc, ids)
+    return ids
+
+
+def refine(dc, rows, items, recipes_by_id, D):
+    """第二轮：对候选配方用挂单明细和成交记录重算（D = fetch_detail 的结果）"""
     out = []
     for x in rows:
         r = recipes_by_id[x["r"]]
@@ -388,6 +394,135 @@ def build_dc(dc, items, recipes, market):
     return out
 
 
+# ======================== 采集（今天挖什么） ========================
+
+# GatheringPoint.Type：1 = 普通采集点；2 = 限时（未知/稀有）；4、5 = 传说 / 限时传说
+NORMAL_POINT = {"1"}
+TIMED_POINT = {"2", "4", "5"}
+GATHER_JOB = {"0": "采矿", "1": "采矿", "2": "园艺", "3": "园艺"}
+GATHER_MIN_PRICE = 30   # 太便宜的不看
+
+
+def load_gathering(items):
+    """返回 {物品ID: 采集信息}，只包含能在市场交易的采矿/园艺物品"""
+    def rd(name):
+        return read_table(name)
+
+    gh, gi = rd("GatheringItem")
+    lvh, lv = rd("GatheringItemLevelConvertTable")
+    lvl = {int(r[0]): (int(r[lvh.index("GatheringItemLevel")]), int(r[lvh.index("Stars")])) for r in lv}
+    # GatheringItem 行 ID → (物品ID, 等级, 星级, 是否隐藏)
+    gitem = {}
+    for r in gi:
+        iid = int(r[gh.index("Item")])
+        if iid <= 0 or not items.get(iid, {}).get("marketable"):
+            continue
+        l, st = lvl.get(int(r[gh.index("GatheringItemLevel")]), (0, 0))
+        gitem[int(r[0])] = (iid, l, st, False)  # 国服表的“隐藏”列位置不可靠，暂不使用
+
+    bh, base = rd("GatheringPointBase")
+    bases = {}
+    for r in base:
+        t = r[bh.index("GatheringType")]
+        if t not in GATHER_JOB:
+            continue
+        slots = [int(r[bh.index("Item[%d]" % k)]) for k in range(8)]
+        bases[int(r[0])] = (GATHER_JOB[t], [s for s in slots if s in gitem])
+
+    th, tr = rd("GatheringPointTransient")
+    timed_ids = {int(r[0]) for r in tr
+                 if r[th.index("EphemeralStartTime")] not in ("65535", "0")
+                 or r[th.index("GatheringRarePopTimeTable")] != "0"}
+
+    sh, sub = rd("GatheringSubCategory")
+    folklore = {int(r[0]): r[sh.index("FolkloreBook")] for r in sub if r[sh.index("FolkloreBook")]}
+
+    ph, pl = rd("PlaceName")
+    place = {int(r[0]): r[ph.index("Name")] for r in pl}
+    tth, tt = rd("TerritoryType")
+    zone = {int(r[0]): place.get(int(r[tth.index("PlaceName")]), "") for r in tt}
+
+    ph2, pts = rd("GatheringPoint")
+    # 国服数据表的列名比实际数据少了一列（Type 后面多了一个 True/False 列），按实际位置读
+    c_type = ph2.index("Type")
+    shift = 1 if pts and pts[0][ph2.index("GatheringPointBase")] in ("True", "False") else 0
+    c_base = ph2.index("GatheringPointBase") + shift
+    c_terr = ph2.index("TerritoryType") + shift
+    c_sub = ph2.index("GatheringSubCategory") + shift
+    out = {}
+    for r in pts:
+        ptype = r[c_type]
+        if ptype not in NORMAL_POINT and ptype not in TIMED_POINT:
+            continue
+        b = bases.get(int(r[c_base]))
+        if not b:
+            continue
+        job, slots = b
+        timed = ptype in TIMED_POINT or int(r[0]) in timed_ids
+        book = folklore.get(int(r[c_sub]), "")
+        z = zone.get(int(r[c_terr]), "")
+        for s in slots:
+            iid, l, st, hidden = gitem[s]
+            g = out.setdefault(iid, {"jobs": set(), "lv": l, "st": st, "hidden": hidden,
+                                     "easy": False, "timed": False, "book": "", "zones": set(), "easyZones": set()})
+            g["jobs"].add(job)
+            if timed or book:
+                g["timed"] = g["timed"] or timed
+                g["book"] = g["book"] or book
+            else:
+                g["easy"] = True  # 至少有一个普通采集点能挖到
+                if z:
+                    g["easyZones"].add(z)
+            if z:
+                g["zones"].add(z)
+    return out
+
+
+def gather_candidates(gather, market):
+    """第一轮粗筛：用汇总数据，挑出普通品质卖得动、价格不太低的"""
+    ids = []
+    for iid in gather:
+        s = summarize(market.get(iid))
+        if not s:
+            continue
+        nq = s["nq"]
+        if nq["vel"] > 0 and (nq["avg"] or 0) >= GATHER_MIN_PRICE:
+            ids.append(iid)
+    return ids
+
+
+def build_gather(ids, gather, D):
+    """第二轮：用成交记录算出可靠售价"""
+    out = []
+    for iid in ids:
+        sell = real_sell(D.get(iid), False)  # 采集出来基本都是普通品质
+        if not sell or sell["price"] < GATHER_MIN_PRICE:
+            continue
+        g = gather[iid]
+        zones = sorted(g["easyZones"] or g["zones"])
+        out.append({
+            "item": iid,
+            "jobs": sorted(g["jobs"]),
+            "lv": g["lv"],
+            "st": g["st"],
+            "easy": g["easy"],          # 有普通采集点
+            "timed": g["timed"] and not g["easy"],
+            "book": g["book"] if not g["easy"] else "",
+            "hidden": g["hidden"],
+            "zones": zones[:3],
+            "zoneMore": max(0, len(zones) - 3),
+            "price": round(sell["price"]),
+            "vel": round(sell["vel"], 2),
+            "lastSale": sell["lastSale"],
+            "onSale": sell["onSale"],
+            "capped": sell["capped"],
+            "sales": sell["sales"],
+            "upd": (D.get(iid) or {}).get("lastUploadTime"),
+        })
+    out.sort(key=lambda x: -(x["price"] * x["vel"]))
+    return out
+
+
 def write_out(base, obj, js_var, js_key=None):
     """
     同时写 .json 和 .js 两份。
@@ -414,6 +549,9 @@ def main():
         ids.update(i for i, _ in r["ings"])
     log("可交易配方 %d 个，涉及物品 %d 种" % (len(recipes), len(ids)))
     recipes_by_id = {r["id"]: r for r in recipes}
+    gather = load_gathering(items)
+    ids |= set(gather)
+    log("可交易采集物 %d 种；一共要查 %d 种物品" % (len(gather), len(ids)))
 
     os.makedirs(OUT, exist_ok=True)
     dcs = sys.argv[1:] or DCS
@@ -421,16 +559,23 @@ def main():
         log("查询大区", dc)
         market = fetch_market(dc, ids)
         rows = build_dc(dc, items, recipes, market)
-        rows = refine(dc, rows, items, recipes_by_id)
+        gids = gather_candidates(gather, market)
+        detail_ids = craft_detail_ids(rows) | set(gids)
+        log("  %s: 复查 %d 个配方 + %d 种采集物，涉及物品 %d 种" % (dc, len(rows), len(gids), len(detail_ids)))
+        D = fetch_detail(dc, detail_ids)
+        rows = refine(dc, rows, items, recipes_by_id, D)
+        grows = build_gather(gids, gather, D)
         # 物品名直接放进每个大区的文件里，几个大区可以同时跑、互不影响
         names = {}
         for x in rows:
             names[str(x["item"])] = items[x["item"]]["name"]
             for iid, _, _ in x["ings"]:
                 names[str(iid)] = items[iid]["name"]
-        write_out(dc, {"dc": dc, "generated": int(time.time() * 1000), "names": names, "rows": rows},
-                  "CRAFT_DATA", dc)
-        log("  %s: 写出 %d 个候选（成本 ≤ 售价 %d%%）" % (dc, len(rows), KEEP_RATIO * 100))
+        for x in grows:
+            names[str(x["item"])] = items[x["item"]]["name"]
+        write_out(dc, {"dc": dc, "generated": int(time.time() * 1000), "names": names,
+                       "rows": rows, "gather": grows}, "CRAFT_DATA", dc)
+        log("  %s: 写出 %d 个配方、%d 种采集物" % (dc, len(rows), len(grows)))
     log("完成", datetime.now(timezone.utc).isoformat())
 
 

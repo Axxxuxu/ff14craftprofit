@@ -39,7 +39,19 @@
   header h1 span { color: var(--accent); }
   header p { margin: 6px 0 0; color: var(--muted); }
 
-  .tabs { display: flex; gap: 6px; margin: 22px 0 12px; flex-wrap: wrap; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+  .modes button {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 12px; padding: 12px 14px; font: inherit; font-size: 17px; font-weight: bold;
+    cursor: pointer; text-align: left; box-shadow: var(--shadow);
+  }
+  .modes button small { display: block; font-size: 12px; font-weight: normal; color: var(--muted); }
+  .modes button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  body.mode-craft .gather-only, body.mode-gather .craft-only { display: none !important; }
+  .where { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .where b { color: var(--ink); font-weight: normal; }
+  .profit .v.price { color: var(--accent); }
+  .tabs { display: flex; gap: 6px; margin: 14px 0 12px; flex-wrap: wrap; }
   .tab {
     border: 1px solid var(--line); background: var(--panel); color: var(--ink);
     padding: 7px 16px; border-radius: 999px; cursor: pointer; font: inherit;
@@ -110,16 +122,25 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>今天<span>搓什么</span>能赚钱</h1>
-    <p>材料在市场上就能买齐、成本远低于售价、最近真有人在买的生产配方。</p>
+    <h1>今天<span id="h1Word">搓什么</span>能赚钱</h1>
+    <p id="h1Sub"></p>
   </header>
+
+  <nav class="modes" id="modeTabs">
+    <button data-mode="craft">🔨 今天搓什么<small>生产职业</small></button>
+    <button data-mode="gather">⛏️ 今天挖什么<small>采集职业</small></button>
+  </nav>
 
   <nav class="tabs" id="dcTabs"></nav>
 
   <section class="filters">
-    <div class="frow">
+    <div class="frow craft-only">
       <label class="k">材料成本 ≤ 售价</label>
       <span id="fRatio"></span>
+    </div>
+    <div class="frow gather-only">
+      <label class="k">单价至少</label>
+      <span id="fMinPrice"></span>
     </div>
     <div class="frow">
       <label class="k">每天至少卖出</label>
@@ -135,7 +156,8 @@
     </div>
     <div class="frow">
       <label class="k">其他</label>
-      <label class="check"><input type="checkbox" id="fNoBook"> 隐藏需要秘籍的配方</label>
+      <label class="check craft-only"><input type="checkbox" id="fNoBook"> 隐藏需要秘籍的配方</label>
+      <label class="check gather-only"><input type="checkbox" id="fEasy"> 只看好挖的（普通采集点，不限时、不要传承录）</label>
       <label class="check"><input type="checkbox" id="fFresh"> 只看 3 天内有更新的数据</label>
     </div>
   </section>
@@ -146,9 +168,11 @@
 
   <footer>
     · 价格和销量来自玩家共享的 <a href="https://universalis.app" target="_blank" rel="noopener">Universalis</a>，数据靠玩家上传，可能有延迟，下手前请在游戏里市场板确认。<br>
-    · 售价 = 最近 30 天成交价的中位数；如果现在有人挂得更低，按更低的算。能做高品质（HQ）的按 HQ 成交算。<br>
-    · 材料成本按“做 3 次”的量，从最便宜的挂单开始买够计算，避免被个别超低价挂单误导。<br>
-    · 单件利润已扣除 5% 市场税。“市场缺货”表示目前没人在卖，可能是稀缺货。
+    · 售价 = 最近 30 天成交价的中位数；如果现在有人挂得更低，按更低的算。<span class="craft-only">能做高品质（HQ）的按 HQ 成交算。</span><span class="gather-only">采集物按普通品质算。</span><br>
+    <span class="craft-only">· 材料成本按“做 3 次”的量，从最便宜的挂单开始买够计算，避免被个别超低价挂单误导。<br>
+    · 单件利润已扣除 5% 市场税。“市场缺货”表示目前没人在卖，可能是稀缺货。</span>
+    <span class="gather-only">· “每天成交额”= 单价 × 每天卖出数量，代表这个东西的市场有多大。“库存紧张”= 市场上在卖的数量不到一天的销量。<br>
+    · 采集等级和地点来自游戏数据，同一物品有多个采集点时只列出前几个。</span>
   </footer>
 </div>
 
@@ -165,6 +189,14 @@
     ['ratio', '成本占比最低'],
     ['vel', '卖得最快'],
   ];
+  const G_JOBS = ['全部', '采矿', '园艺'];
+  const G_PRICES = [0, 100, 500, 1000, 3000];
+  const G_SORTS = [
+    ['value', '每天成交额（单价×日销）'],
+    ['price', '单价最高'],
+    ['vel', '卖得最快'],
+    ['scarce', '库存最紧张'],
+  ];
   const PAGE = 40;
 
   const store = {
@@ -179,7 +211,17 @@
     sort: store.get('sort', 'profit'),
     noBook: store.get('noBook', false),
     fresh: store.get('fresh', false),
+    mode: store.get('mode', 'craft'),
+    gVel: store.get('gVel', 1),
+    gJob: store.get('gJob', '全部'),
+    gSort: store.get('gSort', 'value'),
+    gMinPrice: store.get('gMinPrice', 100),
+    easy: store.get('easy', true),
     shown: PAGE,
+  };
+  const SUB = {
+    craft: '材料在市场上就能买齐、成本远低于售价、最近真有人在买的生产配方。',
+    gather: '普通采集点就能挖、市场上卖得上价、最近真有人在买的采集物。',
   };
 
   const $ = id => document.getElementById(id);
@@ -220,11 +262,24 @@
       b.onclick = () => set('dc', dc);
       tabs.appendChild(b);
     });
+    const g = S.mode === 'gather';
+    document.body.className = 'mode-' + S.mode;
+    $('h1Word').textContent = g ? '挖什么' : '搓什么';
+    $('h1Sub').textContent = SUB[S.mode];
+    [...$('modeTabs').children].forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
     chips($('fRatio'), RATIOS.map(r => [r, pct(r)]), S.ratio, v => set('ratio', v));
-    chips($('fVel'), VELS.map(v => [v, v === 0 ? '不限' : v + ' 个']), S.vel, v => set('vel', v));
-    chips($('fJob'), JOBS.map(j => [j, j]), S.job, v => set('job', v));
-    chips($('fSort'), SORTS, S.sort, v => set('sort', v));
+    chips($('fMinPrice'), G_PRICES.map(p => [p, p === 0 ? '不限' : fmt(p) + ' 金']), S.gMinPrice, v => set('gMinPrice', v));
+    const velKey = g ? 'gVel' : 'vel';
+    chips($('fVel'), VELS.map(v => [v, v === 0 ? '不限' : v + ' 个']), S[velKey], v => set(velKey, v));
+    if (g) {
+      chips($('fJob'), G_JOBS.map(j => [j, j]), S.gJob, v => set('gJob', v));
+      chips($('fSort'), G_SORTS, S.gSort, v => set('gSort', v));
+    } else {
+      chips($('fJob'), JOBS.map(j => [j, j]), S.job, v => set('job', v));
+      chips($('fSort'), SORTS, S.sort, v => set('sort', v));
+    }
     $('fNoBook').checked = S.noBook;
+    $('fEasy').checked = S.easy;
     $('fFresh').checked = S.fresh;
   }
   function set(k, v) {
@@ -232,6 +287,8 @@
     drawControls();
     if (k === 'dc') load(); else render();
   }
+  [...$('modeTabs').children].forEach(b => b.onclick = () => set('mode', b.dataset.mode));
+  $('fEasy').onchange = e => set('easy', e.target.checked);
   $('fNoBook').onchange = e => set('noBook', e.target.checked);
   $('fFresh').onchange = e => set('fresh', e.target.checked);
   $('more').onclick = () => { S.shown += PAGE; render(); };
@@ -326,15 +383,74 @@
     </article>`;
   }
 
+  // ---------- 今天挖什么 ----------
+  // 市场库存够卖几天（挂单被截断时实际库存更多，不算紧张）
+  const scarcity = x => x.capped ? 999 : x.vel > 0 ? x.onSale / x.vel : 999;
+  function gFiltered() {
+    const d = cache[S.dc]; if (!d || !d.gather) return [];
+    const freshCut = Date.now() - 3 * 86400000;
+    const rows = d.gather.filter(x =>
+      x.price >= S.gMinPrice &&
+      x.vel >= S.gVel &&
+      (S.gJob === '全部' || x.jobs.includes(S.gJob)) &&
+      (!S.easy || x.easy) &&
+      (!S.fresh || (x.upd || 0) >= freshCut));
+    const key = {
+      value: x => -(x.price * x.vel),
+      price: x => -x.price,
+      vel: x => -x.vel,
+      scarce: x => scarcity(x),
+    }[S.gSort];
+    return rows.sort((a, b) => key(a) - key(b));
+  }
+
+  function gCard(x) {
+    const n = names[x.item] || ('#' + x.item);
+    const old = (Date.now() - (x.upd || 0)) > 3 * 86400000;
+    const days = scarcity(x);
+    const badges = [
+      `<span class="b">${esc(x.jobs.join(' / '))} ${x.lv}级</span>`,
+      x.onSale === 0 ? '<span class="b scarce">市场缺货</span>'
+        : days < 1 ? '<span class="b scarce">库存紧张</span>' : '',
+      x.timed ? '<span class="b book">限时采集点</span>' : '',
+      x.book ? `<span class="b book">需要${esc(x.book)}</span>` : '',
+      old ? `<span class="b old">数据 ${ago(x.upd)}</span>` : '',
+    ].join('');
+    const zones = x.zones.length
+      ? `<div class="where">在哪挖：<b>${x.zones.map(esc).join('、')}</b>${x.zoneMore ? ` 等 ${x.zones.length + x.zoneMore} 个地区` : ''}</div>`
+      : '';
+    return `<article class="card">
+      <div class="top">
+        <div>
+          <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a></div>
+          <div class="badges">${badges}</div>
+        </div>
+        <div class="profit"><div class="v price">${fmt(x.price)}</div><div class="l">单价（金）</div></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="l">每天卖出</div><div class="v">${x.vel >= 10 ? fmt(x.vel) : x.vel.toFixed(1)} 个</div></div>
+        <div class="stat"><div class="l">每天成交额</div><div class="v">${fmt(x.price * x.vel)}</div></div>
+        <div class="stat"><div class="l">市场在卖</div><div class="v">${fmt(x.onSale)}${x.capped ? '+' : ''} 个</div></div>
+        <div class="stat"><div class="l">库存够卖</div><div class="v">${x.capped ? '充足' : days >= 999 ? '—' : days < 1 ? '不到 1 天' : Math.round(days) + ' 天'}</div></div>
+        <div class="stat"><div class="l">最近成交</div><div class="v">${ago(x.lastSale)}</div></div>
+      </div>
+      ${zones}
+    </article>`;
+  }
+
   function render() {
     const d = cache[S.dc]; if (!d) return;
     names = d.names || {};
-    const rows = filtered();
-    $('count').textContent = `${S.dc}：找到 ${rows.length} 个配方`;
+    const g = S.mode === 'gather';
+    const rows = g ? gFiltered() : filtered();
+    $('count').textContent = `${S.dc}：找到 ${rows.length} ${g ? '种采集物' : '个配方'}`;
     $('gen').textContent = `数据生成于 ${ago(d.generated)}`;
+    const empty = g
+      ? (d.gather ? '这个条件下暂时没有合适的采集物，试试放宽“单价”或“每天卖出”的条件。' : '这份数据还没有采集信息，等下一次自动更新后就有了。')
+      : '这个条件下暂时没有合适的配方，试试放宽“材料成本”或“每天卖出”的条件。';
     $('list').innerHTML = rows.length
-      ? rows.slice(0, S.shown).map(card).join('')
-      : '<div class="empty">这个条件下暂时没有合适的配方，试试放宽“材料成本”或“每天卖出”的条件。</div>';
+      ? rows.slice(0, S.shown).map(g ? gCard : card).join('')
+      : `<div class="empty">${empty}</div>`;
     $('more').hidden = rows.length <= S.shown;
   }
 
