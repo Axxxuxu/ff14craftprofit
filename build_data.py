@@ -35,7 +35,8 @@ COARSE_RATIO = 0.6
 KEEP_RATIO = 0.5
 MARKET_TAX = 0.05  # 市场交易税（只用于显示“到手价”）
 PLAN_CRAFTS = 3    # 按“做 3 次”的量去算材料要买多少，避免被单个超低价挂单误导
-HISTORY_DAYS = 30  # 只看最近 30 天的成交
+HISTORY_DAYS = 15  # 只看最近 15 天的成交（售价中位数和每天卖出数量都按这个算）
+STATS_MS = HISTORY_DAYS * 86400000
 
 DETAIL_FIELDS = ",".join([
     "items.itemID", "items.lastUploadTime", "items.nqSaleVelocity", "items.hqSaleVelocity",
@@ -163,18 +164,18 @@ def fetch_market(dc, ids):
     return out
 
 
-def fetch_detail(dc, ids):
-    """查询挂单明细和最近成交记录。返回 {物品ID: 明细}"""
+def fetch_detail(dc, ids, step=10):
+    """查询挂单明细和最近成交记录（dc 也可以是单个服的名字）。返回 {物品ID: 明细}"""
     from concurrent.futures import ThreadPoolExecutor
     out = {}
     ids = sorted(ids)
     enc = urllib.parse.quote(dc)
-    step = 10  # 明细查询很慢，一次查太多会超时
+    # 大区明细查询很慢，一次查太多会超时；单个服快得多，可以一次多查一些
     chunks = [ids[i:i + step] for i in range(0, len(ids), step)]
 
     def one(chunk):
-        url = "https://universalis.app/api/v2/%s/%s?listings=40&entries=30&fields=%s" % (
-            enc, ",".join(map(str, chunk)), DETAIL_FIELDS)
+        url = "https://universalis.app/api/v2/%s/%s?listings=40&entries=30&statsWithin=%d&fields=%s" % (
+            enc, ",".join(map(str, chunk)), STATS_MS, DETAIL_FIELDS)
         d = http_json(url)
         time.sleep(0.2)
         return d.get("items") if len(chunk) > 1 else {str(chunk[0]): d}
@@ -185,6 +186,34 @@ def fetch_detail(dc, ids):
                 out[int(k)] = v
             if n % 40 == 0:
                 log("  %s 复查: %d / %d" % (dc, min(n * step, len(ids)), len(ids)))
+    return out
+
+
+def dc_worlds(dc):
+    """返回这个大区下面所有服的名字"""
+    names = {w["id"]: w["name"] for w in http_json("https://universalis.app/api/v2/worlds")}
+    for d in http_json("https://universalis.app/api/v2/data-centers"):
+        if d.get("name") == dc:
+            return [names[i] for i in d.get("worlds", []) if i in names]
+    return []
+
+
+def world_sell(world, items_hq):
+    """
+    查一个服里成品/采集物的卖价和销量。
+    items_hq: {物品ID: 是否优先按 HQ 算}
+    返回 {物品ID字符串: [售价, 是否HQ, 每天卖出, 最近成交时间, 在卖数量, 挂单是否满, 数据更新时间]}
+    在这个服最近 15 天成交少于 2 次的物品不写（说明这个服基本没人买）。
+    """
+    D = fetch_detail(world, list(items_hq), step=25)
+    out = {}
+    for iid, hq in items_hq.items():
+        sell = real_sell(D.get(iid), hq)
+        if not sell:
+            continue
+        out[str(iid)] = [round(sell["price"]), 1 if sell["q"] == "hq" else 0, round(sell["vel"], 2),
+                         sell["lastSale"], sell["onSale"], 1 if sell["capped"] else 0,
+                         (D.get(iid) or {}).get("lastUploadTime")]
     return out
 
 
@@ -573,8 +602,23 @@ def main():
                 names[str(iid)] = items[iid]["name"]
         for x in grows:
             names[str(x["item"])] = items[x["item"]]["name"]
+        # 按单个服再查一遍成品和采集物的卖价、销量（买材料可以跨服，所以材料成本还是按整个大区算）
+        items_hq = {}
+        for x in rows:
+            r = recipes_by_id[x["r"]]
+            items_hq[x["item"]] = items_hq.get(x["item"], False) or (r["canHq"] and items[x["item"]]["canHq"])
+        for x in grows:
+            items_hq.setdefault(x["item"], False)
+        worlds, per_world = dc_worlds(dc), {}
+        for w in worlds:
+            try:
+                per_world[w] = world_sell(w, items_hq)
+                log("  %s / %s: %d 种有成交" % (dc, w, len(per_world[w])))
+            except Exception as e:  # 某个服查失败不影响整个大区
+                log("  %s / %s 查询失败: %s" % (dc, w, e))
         write_out(dc, {"dc": dc, "generated": int(time.time() * 1000), "names": names,
-                       "rows": rows, "gather": grows}, "CRAFT_DATA", dc)
+                       "days": HISTORY_DAYS, "worlds": [w for w in worlds if w in per_world],
+                       "world": per_world, "rows": rows, "gather": grows}, "CRAFT_DATA", dc)
         log("  %s: 写出 %d 个配方、%d 种采集物" % (dc, len(rows), len(grows)))
     log("完成", datetime.now(timezone.utc).isoformat())
 

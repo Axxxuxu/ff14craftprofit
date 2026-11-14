@@ -57,6 +57,12 @@
     padding: 7px 16px; border-radius: 999px; cursor: pointer; font: inherit;
   }
   .tab.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .worldbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 12px; font-size: 13px; color: var(--muted); }
+  .worldbar select {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; cursor: pointer;
+  }
+  .worldbar select.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
 
   .filters {
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
@@ -112,6 +118,30 @@
   footer { margin-top: 30px; color: var(--muted); font-size: 12px; line-height: 1.8; }
   footer a { color: inherit; }
 
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(20, 16, 8, 0.45); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-bg[hidden] { display: none; }
+  .modal {
+    background: var(--panel); color: var(--ink); border-radius: 14px; max-width: 460px; width: 100%;
+    max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; padding: 20px 20px 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); border: 1px solid var(--line);
+  }
+  .modal h2 { margin: 0 0 10px; font-size: 19px; }
+  .modal ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; font-size: 14px; }
+  .modal ol b { color: var(--accent); }
+  .modal h3 { margin: 16px 0 6px; font-size: 15px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .modal ul.log { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+  .modal ul.log li { display: grid; grid-template-columns: auto 1fr; gap: 10px; }
+  .modal ul.log .d { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .modal .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .modal .ok {
+    border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: bold;
+    padding: 8px 22px; border-radius: 999px; cursor: pointer;
+  }
+  .help-link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+
   @media (max-width: 640px) {
     header h1 { font-size: 23px; }
     .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -120,6 +150,32 @@
 </style>
 </head>
 <body>
+<div class="modal-bg" id="notice" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="noticeTitle">
+    <h2 id="noticeTitle">使用前请看一眼 👀</h2>
+    <ol>
+      <li>网站数据<b>每 6 小时才更新一次</b>，价格和销量可能已经变了。下手前请<b>先在游戏里的市场板确认</b>。</li>
+      <li>价格来自玩家共享的 Universalis，要有人用插件看过交易板才会更新。冷门的服、冷门的东西，数据可能是<b>几天前的</b>，卡片上会标出“数据 X 天前”。</li>
+      <li>售价和每天卖出数量按<b>最近 15 天</b>的成交算，只是参考，不保证一定卖得掉、卖得到这个价。</li>
+      <li>很多人看同一份推荐，可能会<b>一起去搓同一样东西</b>，价格会被压低、材料会被买空，建议别一次做太多。</li>
+      <li>上面选了“我的服”以后，卖价按你的服算；材料成本按整个大区最便宜的算，<b>需要跨服去买</b>。</li>
+      <li>本网站只是个人做的参考工具，和官方无关，不收集任何个人信息。</li>
+    </ol>
+    <h3>更新记录</h3>
+    <ul class="log">
+      <li><span class="d">11-14</span><span>新增“我的服”：大区下面可以选具体服务器，卖价和销量按你的服算。</span></li>
+      <li><span class="d">11-14</span><span>售价和每天卖出数量改成按最近 15 天的成交算（原来是 30 天），更贴近现在的行情。</span></li>
+      <li><span class="d">11-14</span><span>新增打开网站时的注意事项弹窗。</span></li>
+      <li><span class="d">11-14</span><span>新增“今天挖什么”：给采矿、园艺推荐好挖又值钱的东西。</span></li>
+      <li><span class="d">11-14</span><span>网站上线：四个大区都能选，每 6 小时自动更新一次。</span></li>
+    </ul>
+    <div class="foot">
+      <label class="check"><input type="checkbox" id="noticeSkip"> 以后不再自动弹出</label>
+      <button class="ok" id="noticeOk">知道了</button>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
   <header>
     <h1>今天<span id="h1Word">搓什么</span>能赚钱</h1>
@@ -132,6 +188,11 @@
   </nav>
 
   <nav class="tabs" id="dcTabs"></nav>
+  <div class="worldbar" id="worldBar" hidden>
+    <label for="world">我的服：</label>
+    <select id="world"></select>
+    <span id="worldHint"></span>
+  </div>
 
   <section class="filters">
     <div class="frow craft-only">
@@ -167,8 +228,10 @@
   <button class="tab more" id="more" hidden>显示更多</button>
 
   <footer>
+    · <button class="help-link" id="noticeOpen">查看注意事项</button><br>
     · 价格和销量来自玩家共享的 <a href="https://universalis.app" target="_blank" rel="noopener">Universalis</a>，数据靠玩家上传，可能有延迟，下手前请在游戏里市场板确认。<br>
-    · 售价 = 最近 30 天成交价的中位数；如果现在有人挂得更低，按更低的算。<span class="craft-only">能做高品质（HQ）的按 HQ 成交算。</span><span class="gather-only">采集物按普通品质算。</span><br>
+    · 售价 = 最近 <span class="days">15</span> 天成交价的中位数；如果现在有人挂得更低，按更低的算。“每天卖出”= 最近 <span class="days">15</span> 天平均每天卖出多少个。<br>
+    · 选了“我的服”以后，售价、销量、在卖数量都按你那个服算（雇员只能在自己的服挂单）；材料成本还是按整个大区最便宜的算（买材料可以跨服）。你的服最近没人买的东西不会显示。<span class="craft-only">能做高品质（HQ）的按 HQ 成交算。</span><span class="gather-only">采集物按普通品质算。</span><br>
     <span class="craft-only">· 材料成本按“做 3 次”的量，从最便宜的挂单开始买够计算，避免被个别超低价挂单误导。<br>
     · 单件利润已扣除 5% 市场税。“市场缺货”表示目前没人在卖，可能是稀缺货。</span>
     <span class="gather-only">· “每天成交额”= 单价 × 每天卖出数量，代表这个东西的市场有多大。“库存紧张”= 市场上在卖的数量不到一天的销量。<br>
@@ -217,6 +280,7 @@
     gSort: store.get('gSort', 'value'),
     gMinPrice: store.get('gMinPrice', 100),
     easy: store.get('easy', true),
+    worlds: store.get('worlds', {}),   // 每个大区各记一个“我的服”
     shown: PAGE,
   };
   const SUB = {
@@ -321,10 +385,44 @@
     }
   }
 
+  // ---------- 我的服 ----------
+  const curWorld = () => {
+    const d = cache[S.dc], w = S.worlds[S.dc];
+    return d && d.world && w && d.world[w] ? w : '';
+  };
+  // 选了服：把卖价、销量等换成那个服的数据；这个服最近没人买就返回 null
+  function inWorld(x, isCraft) {
+    const w = curWorld(); if (!w) return x;
+    const v = cache[S.dc].world[w][x.item]; if (!v) return null;
+    const [price, hq, vel, lastSale, onSale, capped, upd] = v;
+    const y = { ...x, price, vel, lastSale, onSale, capped: !!capped, upd: upd || x.upd };
+    if (isCraft) {
+      y.q = hq ? 'hq' : 'nq';
+      y.listed = onSale > 0;
+      y.ratio = x.cost / price;
+      y.profit = Math.round(price * 0.95 - x.cost);
+    }
+    return y;
+  }
+  function drawWorld() {
+    const d = cache[S.dc], bar = $('worldBar'), sel = $('world');
+    if (!d || !d.worlds || !d.worlds.length) { bar.hidden = true; return; }
+    bar.hidden = false;
+    const w = curWorld();
+    sel.innerHTML = '<option value="">整个大区</option>' +
+      d.worlds.map(n => `<option value="${esc(n)}"${n === w ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    sel.classList.toggle('on', !!w);
+    $('worldHint').textContent = w ? '卖价和销量按 ' + w + ' 算，材料按整个大区最便宜的算' : '选你雇员所在的服，看你那里卖不卖得动';
+  }
+  $('world').onchange = e => {
+    S.worlds[S.dc] = e.target.value; store.set('worlds', S.worlds); S.shown = PAGE;
+    drawWorld(); render();
+  };
+
   function filtered() {
     const d = cache[S.dc]; if (!d) return [];
     const freshCut = Date.now() - 3 * 86400000;
-    let rows = d.rows.filter(x =>
+    let rows = d.rows.map(x => inWorld(x, true)).filter(x => x &&
       x.ratio <= S.ratio &&
       x.vel >= S.vel &&
       (S.job === '全部' || x.job === S.job) &&
@@ -389,7 +487,7 @@
   function gFiltered() {
     const d = cache[S.dc]; if (!d || !d.gather) return [];
     const freshCut = Date.now() - 3 * 86400000;
-    const rows = d.gather.filter(x =>
+    const rows = d.gather.map(x => inWorld(x, false)).filter(x => x &&
       x.price >= S.gMinPrice &&
       x.vel >= S.gVel &&
       (S.gJob === '全部' || x.jobs.includes(S.gJob)) &&
@@ -441,18 +539,33 @@
   function render() {
     const d = cache[S.dc]; if (!d) return;
     names = d.names || {};
+    drawWorld();
+    document.querySelectorAll('.days').forEach(e => e.textContent = d.days || 30);
     const g = S.mode === 'gather';
     const rows = g ? gFiltered() : filtered();
-    $('count').textContent = `${S.dc}：找到 ${rows.length} ${g ? '种采集物' : '个配方'}`;
+    const w = curWorld();
+    $('count').textContent = `${S.dc}${w ? ' · ' + w : ''}：找到 ${rows.length} ${g ? '种采集物' : '个配方'}`;
     $('gen').textContent = `数据生成于 ${ago(d.generated)}`;
     const empty = g
       ? (d.gather ? '这个条件下暂时没有合适的采集物，试试放宽“单价”或“每天卖出”的条件。' : '这份数据还没有采集信息，等下一次自动更新后就有了。')
       : '这个条件下暂时没有合适的配方，试试放宽“材料成本”或“每天卖出”的条件。';
     $('list').innerHTML = rows.length
       ? rows.slice(0, S.shown).map(g ? gCard : card).join('')
-      : `<div class="empty">${empty}</div>`;
+      : `<div class="empty">${empty}${w ? '<br>也可能是 ' + esc(w) + ' 最近这些东西没什么人买，可以切回“整个大区”看看。' : ''}</div>`;
     $('more').hidden = rows.length <= S.shown;
   }
+
+  // ---------- 注意事项弹窗 ----------
+  const notice = $('notice');
+  const closeNotice = () => {
+    notice.hidden = true;
+    if ($('noticeSkip').checked) store.set('noticeSkip', true);
+  };
+  $('noticeOk').onclick = closeNotice;
+  notice.onclick = e => { if (e.target === notice) closeNotice(); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !notice.hidden) closeNotice(); });
+  $('noticeOpen').onclick = () => { $('noticeSkip').checked = !!store.get('noticeSkip', false); notice.hidden = false; };
+  if (!store.get('noticeSkip', false)) notice.hidden = false;
 
   drawControls();
   load();
