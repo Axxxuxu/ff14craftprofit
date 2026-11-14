@@ -164,7 +164,7 @@ def fetch_market(dc, ids):
     return out
 
 
-def fetch_detail(dc, ids, step=10):
+def fetch_detail(dc, ids, step=10, listings=40, entries=30, fields=None):
     """查询挂单明细和最近成交记录（dc 也可以是单个服的名字）。返回 {物品ID: 明细}"""
     from concurrent.futures import ThreadPoolExecutor
     out = {}
@@ -174,8 +174,8 @@ def fetch_detail(dc, ids, step=10):
     chunks = [ids[i:i + step] for i in range(0, len(ids), step)]
 
     def one(chunk):
-        url = "https://universalis.app/api/v2/%s/%s?listings=40&entries=30&statsWithin=%d&fields=%s" % (
-            enc, ",".join(map(str, chunk)), STATS_MS, DETAIL_FIELDS)
+        url = "https://universalis.app/api/v2/%s/%s?listings=%d&entries=%d&statsWithin=%d&fields=%s" % (
+            enc, ",".join(map(str, chunk)), listings, entries, STATS_MS, fields or DETAIL_FIELDS)
         d = http_json(url)
         time.sleep(0.2)
         return d.get("items") if len(chunk) > 1 else {str(chunk[0]): d}
@@ -189,13 +189,22 @@ def fetch_detail(dc, ids, step=10):
     return out
 
 
+_DC_MAP = None
+
+
+def all_dc_worlds():
+    """返回 {国服大区名: [服名, ...]}"""
+    global _DC_MAP
+    if _DC_MAP is None:
+        names = {w["id"]: w["name"] for w in http_json("https://universalis.app/api/v2/worlds")}
+        _DC_MAP = {d["name"]: [names[i] for i in d.get("worlds", []) if i in names]
+                   for d in http_json("https://universalis.app/api/v2/data-centers") if d.get("name") in DCS}
+    return _DC_MAP
+
+
 def dc_worlds(dc):
     """返回这个大区下面所有服的名字"""
-    names = {w["id"]: w["name"] for w in http_json("https://universalis.app/api/v2/worlds")}
-    for d in http_json("https://universalis.app/api/v2/data-centers"):
-        if d.get("name") == dc:
-            return [names[i] for i in d.get("worlds", []) if i in names]
-    return []
+    return all_dc_worlds().get(dc, [])
 
 
 def world_sell(world, items_hq):
@@ -552,6 +561,103 @@ def build_gather(ids, gather, D):
     return out
 
 
+# ======================== 今天搬什么（服与服之间搬砖） ========================
+# 思路：同一个大区里，某样东西在 A 服挂得很便宜，在 B 服却能卖上价、而且最近 15 天真有人买。
+# 第一轮用整个大区的汇总数据粗筛（最低挂单 vs 平均成交价），第二轮查每个服的挂单和成交记录。
+ARB_MAX = 800          # 第二轮最多复查多少样
+ARB_MIN_GAP = 300      # 粗筛：扣掉买卖两边的税后，每个至少能差这么多金
+ARB_FIELDS = ",".join([
+    "items.itemID", "items.lastUploadTime",
+    "items.listings.pricePerUnit", "items.listings.quantity", "items.listings.hq", "items.listings.worldName",
+    "items.listings.lastReviewTime",
+    "items.recentHistory.pricePerUnit", "items.recentHistory.quantity", "items.recentHistory.hq",
+    "items.recentHistory.timestamp", "items.recentHistory.worldName",
+])
+
+
+def arb_candidates(market, items):
+    """第一轮：大区里最便宜的挂单，比平均成交价低很多，并且卖得动"""
+    cands = []
+    for iid, m in market.items():
+        if not items.get(iid, {}).get("marketable"):
+            continue
+        s = summarize(m)
+        if not s:
+            continue
+        best = None
+        for q in ("nq", "hq"):
+            x = s[q]
+            # 最便宜的挂单：本大区和整个国服（四个大区）里取更便宜的
+            low = min(p for p in (x["min"], g(m, q, "minListing", "region", "price")) if p) if (
+                x["min"] or g(m, q, "minListing", "region", "price")) else None
+            if not low or not x["avg"] or x["vel"] < 0.3:
+                continue
+            gap = x["avg"] * (1 - MARKET_TAX) - low * (1 + MARKET_TAX)
+            if gap < ARB_MIN_GAP or x["avg"] < low * 1.4:
+                continue
+            score = gap * min(x["vel"], 5)
+            if not best or score > best[0]:
+                best = (score, iid, q == "hq")
+        if best:
+            cands.append(best)
+    cands.sort(reverse=True)
+    return [(iid, hq) for _, iid, hq in cands[:ARB_MAX]]
+
+
+def build_arb(cands, D, worlds, R=None, all_worlds=None):
+    """
+    第二轮：按服整理。每样东西写成
+    [物品ID, 是否HQ, {服: [最便宜几单[[单价,数量],..], 15天成交价中位数, 15天成交次数, 每天卖出, 最近成交时间, 在卖数量, 挂单最近被看到的时间]}]
+    """
+    now = time.time()
+    cutoff = now - HISTORY_DAYS * 86400
+    out = []
+    for iid, hq in cands:
+        d = D.get(iid)
+        if not d:
+            continue
+        per = {}
+        # 挂单：本大区的服用本大区查到的挂单（更全）；别的大区的服用整个国服查到的挂单
+        ls_all = [l for l in (d.get("listings") or []) if l.get("worldName") in worlds]
+        ls_all += [l for l in ((R or {}).get(iid) or {}).get("listings") or []
+                   if l.get("worldName") not in worlds and l.get("worldName") in (all_worlds or ())]
+        for l in ls_all:
+            if bool(l.get("hq")) != hq:
+                continue
+            w = per.setdefault(l["worldName"], {"ls": [], "sales": [], "t": 0})
+            w["ls"].append([l["pricePerUnit"], l["quantity"]])
+            w["t"] = max(w["t"], l.get("lastReviewTime") or 0)
+        hist = [h for h in (d.get("recentHistory") or []) if bool(h.get("hq")) == hq]
+        # 成交记录最多拿 100 条；如果 100 条还没覆盖满 15 天，按实际覆盖的天数算每天卖出
+        span_start = cutoff
+        if len(d.get("recentHistory") or []) >= 100:
+            span_start = max(cutoff, min(h["timestamp"] for h in d["recentHistory"]))
+        days = max(1.0, (now - span_start) / 86400)
+        for h in hist:
+            if h["timestamp"] < span_start or h.get("worldName") not in worlds:
+                continue
+            per.setdefault(h["worldName"], {"ls": [], "sales": [], "t": 0})["sales"].append(h)
+        wout = {}
+        for w, x in per.items():
+            ls = sorted(x["ls"])
+            sales = x["sales"]
+            wout[w] = [
+                ls[:5],
+                round(median([h["pricePerUnit"] for h in sales])) if sales else None,
+                len(sales),
+                round(sum(h["quantity"] for h in sales) / days, 2),
+                max(h["timestamp"] for h in sales) * 1000 if sales else None,
+                sum(q for _, q in ls),
+                x["t"] * 1000 if x["t"] else None,
+            ]
+        # 至少要有一个服在卖、一个别的服最近有人买，才有搬砖的可能
+        sellers = [w for w, v in wout.items() if v[0]]
+        buyers = [w for w, v in wout.items() if v[2] >= 2]
+        if sellers and buyers and (len(set(sellers) | set(buyers)) >= 2):
+            out.append([iid, 1 if hq else 0, wout])
+    return out
+
+
 def write_out(base, obj, js_var, js_key=None):
     """
     同时写 .json 和 .js 两份。
@@ -580,6 +686,7 @@ def main():
     recipes_by_id = {r["id"]: r for r in recipes}
     gather = load_gathering(items)
     ids |= set(gather)
+    ids |= {i for i, it in items.items() if it["marketable"]}  # 搬砖要看所有能交易的东西
     log("可交易采集物 %d 种；一共要查 %d 种物品" % (len(gather), len(ids)))
 
     os.makedirs(OUT, exist_ok=True)
@@ -616,10 +723,26 @@ def main():
                 log("  %s / %s: %d 种有成交" % (dc, w, len(per_world[w])))
             except Exception as e:  # 某个服查失败不影响整个大区
                 log("  %s / %s 查询失败: %s" % (dc, w, e))
+        # 今天搬什么
+        arb = []
+        try:
+            ac = arb_candidates(market, items)
+            log("  %s: 搬砖粗筛 %d 样，开始复查各服挂单和成交" % (dc, len(ac)))
+            aid = [i for i, _ in ac]
+            D2 = fetch_detail(dc, aid, step=10, listings=100, entries=100, fields=ARB_FIELDS)
+            # 再查一遍整个国服（四个大区）的挂单，用来比较去别的大区买
+            R = fetch_detail("中国", aid, step=10, listings=80, entries=0, fields=ARB_FIELDS)
+            every = {w for ws in all_dc_worlds().values() for w in ws}
+            arb = build_arb(ac, D2, set(worlds), R, every)
+            for x in arb:
+                names[str(x[0])] = items[x[0]]["name"]
+        except Exception as e:  # 搬砖查失败不影响其他功能
+            log("  %s 搬砖查询失败: %s" % (dc, e))
         write_out(dc, {"dc": dc, "generated": int(time.time() * 1000), "names": names,
                        "days": HISTORY_DAYS, "worlds": [w for w in worlds if w in per_world],
-                       "world": per_world, "rows": rows, "gather": grows}, "CRAFT_DATA", dc)
-        log("  %s: 写出 %d 个配方、%d 种采集物" % (dc, len(rows), len(grows)))
+                       "dcWorlds": all_dc_worlds(),
+                       "world": per_world, "rows": rows, "gather": grows, "arb": arb}, "CRAFT_DATA", dc)
+        log("  %s: 写出 %d 个配方、%d 种采集物、%d 样搬砖" % (dc, len(rows), len(grows), len(arb)))
     log("完成", datetime.now(timezone.utc).isoformat())
 
 

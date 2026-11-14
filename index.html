@@ -39,7 +39,12 @@
   header h1 span { color: var(--accent); }
   header p { margin: 6px 0 0; color: var(--muted); }
 
-  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 22px; }
+  body.mode-arb .craft-only, body.mode-arb .gather-only, body.mode-arb .not-arb,
+  body.mode-craft .arb-only, body.mode-gather .arb-only { display: none !important; }
+  .route { margin-top: 8px; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .route b { font-size: 14px; }
+  .route .arrow { color: var(--accent); font-weight: bold; }
   .modes button {
     border: 1px solid var(--line); background: var(--panel); color: var(--ink);
     border-radius: 12px; padding: 12px 14px; font: inherit; font-size: 17px; font-weight: bold;
@@ -202,6 +207,7 @@
     </ol>
     <h3>更新记录</h3>
     <ul class="log">
+      <li><span class="d">11-14</span><span>新增“今天搬什么”：找出同一个大区里，别的服挂得便宜、你的服卖得上价的东西。</span></li>
       <li><span class="d">11-14</span><span>新增“购物清单”：每个配方旁边点一下，实时查四个大区的挂单，告诉你先去哪个服、再去哪个服买材料。</span></li>
       <li><span class="d">11-14</span><span>新增“我的服”：大区下面可以选具体服务器，卖价和销量按你的服算。</span></li>
       <li><span class="d">11-14</span><span>售价和每天卖出数量改成按最近 15 天的成交算（原来是 30 天），更贴近现在的行情。</span></li>
@@ -236,6 +242,7 @@
   <nav class="modes" id="modeTabs">
     <button data-mode="craft">🔨 今天搓什么<small>生产职业</small></button>
     <button data-mode="gather">⛏️ 今天挖什么<small>采集职业</small></button>
+    <button data-mode="arb">🚚 今天搬什么<small>服与服之间搬砖</small></button>
   </nav>
 
   <nav class="tabs" id="dcTabs"></nav>
@@ -254,11 +261,19 @@
       <label class="k">单价至少</label>
       <span id="fMinPrice"></span>
     </div>
+    <div class="frow arb-only">
+      <label class="k">去哪个大区买</label>
+      <span id="fArbBuy"></span>
+    </div>
+    <div class="frow arb-only">
+      <label class="k">每个至少赚</label>
+      <span id="fArbMin"></span>
+    </div>
     <div class="frow">
       <label class="k">每天至少卖出</label>
       <span id="fVel"></span>
     </div>
-    <div class="frow">
+    <div class="frow not-arb">
       <label class="k">职业</label>
       <span id="fJob"></span>
     </div>
@@ -282,11 +297,15 @@
     · <button class="help-link" id="noticeOpen">查看注意事项</button><br>
     · 价格和销量来自玩家共享的 <a href="https://universalis.app" target="_blank" rel="noopener">Universalis</a>，数据靠玩家上传，可能有延迟，下手前请在游戏里市场板确认。<br>
     · 售价 = 最近 <span class="days">15</span> 天成交价的中位数；如果现在有人挂得更低，按更低的算。“每天卖出”= 最近 <span class="days">15</span> 天平均每天卖出多少个。<br>
-    · 选了“我的服”以后，售价、销量、在卖数量都按你那个服算（雇员只能在自己的服挂单）；材料成本还是按整个大区最便宜的算（买材料可以跨服）。你的服最近没人买的东西不会显示。<span class="craft-only">能做高品质（HQ）的按 HQ 成交算。</span><span class="gather-only">采集物按普通品质算。</span><br>
+    <span class="not-arb">· 选了“我的服”以后，售价、销量、在卖数量都按你那个服算（雇员只能在自己的服挂单）；材料成本还是按整个大区最便宜的算（买材料可以跨服）。你的服最近没人买的东西不会显示。<span class="craft-only">能做高品质（HQ）的按 HQ 成交算。</span><span class="gather-only">采集物按普通品质算。</span><br></span>
     <span class="craft-only">· 材料成本按“做 3 次”的量，从最便宜的挂单开始买够计算，避免被个别超低价挂单误导。<br>
     · 单件利润已扣除 5% 市场税。“市场缺货”表示目前没人在卖，可能是稀缺货。</span>
     <span class="gather-only">· “每天成交额”= 单价 × 每天卖出数量，代表这个东西的市场有多大。“库存紧张”= 市场上在卖的数量不到一天的销量。<br>
     · 采集等级和地点来自游戏数据，同一物品有多个采集点时只列出前几个。</span>
+    <span class="arb-only">· 搬砖 = 在同一个大区里，从挂得便宜的服买进，拿到你的服挂出去卖。默认只在本大区里找；也可以在“去哪个大区买”里选别的大区，或者四个大区一起看（去别的大区买要超域旅行）。<br>
+    · 卖价 = 你的服最近 15 天成交价的中位数；如果你的服现在有人挂得更低，按更低的算。差价已经扣掉买的 5% 税和卖的 5% 税。<br>
+    · “每天能赚”= 每个差价 × 每天能卖出的数量（不超过便宜挂单的数量）。没选“我的服”时，显示整个大区里差价最大的两个服。<br>
+    · 搬过来的东西要挂单等人买，卖出去需要时间；你的服在卖的数量多，说明竞争大。</span>
   </footer>
 </div>
 
@@ -331,13 +350,26 @@
     gSort: store.get('gSort', 'value'),
     gMinPrice: store.get('gMinPrice', 100),
     easy: store.get('easy', true),
+    aVel: store.get('aVel', 1),
+    aMin: store.get('aMin', 1000),
+    aSort: store.get('aSort', 'daily'),
+    aBuy: store.get('aBuy', 'same'),   // same = 本大区；或某个大区名；all = 四个大区都看
     worlds: store.get('worlds', {}),   // 每个大区各记一个“我的服”
     shown: PAGE,
   };
   const SUB = {
     craft: '材料在市场上就能买齐、成本远低于售价、最近真有人在买的生产配方。',
     gather: '普通采集点就能挖、市场上卖得上价、最近真有人在买的采集物。',
+    arb: '同一个大区里，别的服挂得便宜、你的服最近 15 天真有人买的东西：从那边便宜买进，搬到你的服卖。',
   };
+  const H1 = { craft: '搓什么', gather: '挖什么', arb: '搬什么' };
+  const A_MINS = [0, 500, 1000, 5000, 10000];
+  const A_SORTS = [
+    ['daily', '每天能赚（差价×日销）'],
+    ['profit', '每个差价最大'],
+    ['ratio', '利润率最高'],
+    ['vel', '卖得最快'],
+  ];
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -378,16 +410,21 @@
       b.onclick = () => set('dc', dc);
       tabs.appendChild(b);
     });
-    const g = S.mode === 'gather';
+    const g = S.mode === 'gather', a = S.mode === 'arb';
     document.body.className = 'mode-' + S.mode;
-    $('h1Word').textContent = g ? '挖什么' : '搓什么';
+    $('h1Word').textContent = H1[S.mode];
     $('h1Sub').textContent = SUB[S.mode];
     [...$('modeTabs').children].forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
     chips($('fRatio'), RATIOS.map(r => [r, pct(r)]), S.ratio, v => set('ratio', v));
     chips($('fMinPrice'), G_PRICES.map(p => [p, p === 0 ? '不限' : fmt(p) + ' 金']), S.gMinPrice, v => set('gMinPrice', v));
-    const velKey = g ? 'gVel' : 'vel';
+    chips($('fArbBuy'), [['same', `本大区（${S.dc}）`], ...DCS.filter(x => x !== S.dc).map(x => [x, x]), ['all', '四个大区都看']],
+      S.aBuy === S.dc ? 'same' : S.aBuy, v => set('aBuy', v));
+    chips($('fArbMin'), A_MINS.map(p => [p, p === 0 ? '不限' : fmt(p) + ' 金']), S.aMin, v => set('aMin', v));
+    const velKey = a ? 'aVel' : g ? 'gVel' : 'vel';
     chips($('fVel'), VELS.map(v => [v, v === 0 ? '不限' : v + ' 个']), S[velKey], v => set(velKey, v));
-    if (g) {
+    if (a) {
+      chips($('fSort'), A_SORTS, S.aSort, v => set('aSort', v));
+    } else if (g) {
       chips($('fJob'), G_JOBS.map(j => [j, j]), S.gJob, v => set('gJob', v));
       chips($('fSort'), G_SORTS, S.gSort, v => set('gSort', v));
     } else {
@@ -472,7 +509,9 @@
     sel.innerHTML = '<option value="">整个大区</option>' +
       d.worlds.map(n => `<option value="${esc(n)}"${n === w ? ' selected' : ''}>${esc(n)}</option>`).join('');
     sel.classList.toggle('on', !!w);
-    $('worldHint').textContent = w ? '卖价和销量按 ' + w + ' 算，材料按整个大区最便宜的算' : '选你雇员所在的服，看你那里卖不卖得动';
+    $('worldHint').textContent = S.mode === 'arb'
+      ? (w ? '从别的服买进，拿到 ' + w + ' 卖' : '选你雇员所在的服；不选就显示整个大区里差价最大的两个服')
+      : w ? '卖价和销量按 ' + w + ' 算，材料按整个大区最便宜的算' : '选你雇员所在的服，看你那里卖不卖得动';
   }
   $('world').onchange = e => {
     S.worlds[S.dc] = e.target.value; store.set('worlds', S.worlds); S.shown = PAGE;
@@ -596,22 +635,104 @@
     </article>`;
   }
 
+  // ---------- 今天搬什么（服与服之间搬砖） ----------
+  // 数据：d.arb = [[物品ID, 是否HQ, {服: [最便宜几单[[单价,数量]], 15天成交价中位数, 15天成交次数, 每天卖出, 最近成交, 在卖数量, 挂单最近看到]}]]
+  // 服 → 所在大区
+  function worldDc(d) {
+    const m = {};
+    Object.entries(d.dcWorlds || { [S.dc]: d.worlds || [] }).forEach(([dc, ws]) => ws.forEach(w => m[w] = dc));
+    return m;
+  }
+  function arbEval([item, hq, W], home, wdc, buyOk) {
+    let best = null;
+    (home ? [home] : Object.keys(W).filter(w => wdc[w] === S.dc)).forEach(H => {
+      const h = W[H];
+      if (!h || h[2] < 3 || !h[1]) return;          // 你的服最近 15 天成交不到 3 次：不算（太少容易被个别高价成交误导）
+      const sell = h[0].length ? Math.min(h[1], h[0][0][0]) : h[1]; // 你的服有人挂得更低，就得跟着降价
+      // 防刷单：拿大区里其他服的成交价当参考，你的服卖价比参考高出 4 倍以上，多半是个别人刷出来的异常成交
+      const ref = [];
+      Object.keys(W).forEach(o => { if (o !== H && W[o][1] && W[o][2] > 0) for (let k = 0; k < W[o][2]; k++) ref.push(W[o][1]); });
+      ref.sort((a, b) => a - b);
+      if (ref.length >= 2 && sell > ref[ref.length >> 1] * 4) return;
+      Object.keys(W).forEach(B => {
+        if (B === H || !W[B][0].length || !buyOk(wdc[B])) return;
+        const buy = W[B][0][0][0];
+        const profit = sell * 0.95 - buy * 1.05;
+        if (profit <= 0) return;
+        if (sell > buy * 20) return; // 差 20 倍以上基本是挂错价或刷单，不显示
+        const units = W[B][0].filter(([p]) => p * 1.05 < sell * 0.95).reduce((s, [, q]) => s + q, 0);
+        const daily = profit * Math.min(h[3], units);
+        if (!best || profit > best.profit) {
+          best = { item, hq, home: H, src: B, srcDc: wdc[B], sell, buy, profit, ratio: profit / (buy * 1.05), vel: h[3],
+            cnt: h[2], last: h[4], homeOnSale: h[5], units, daily, seen: W[B][6],
+            cheap: W[B][0].filter(([p]) => p * 1.05 < sell * 0.95) };
+        }
+      });
+    });
+    return best;
+  }
+  function aFiltered() {
+    const d = cache[S.dc]; if (!d || !d.arb) return [];
+    const home = curWorld(), freshCut = Date.now() - 3 * 86400000;
+    const wdc = worldDc(d);
+    const buy = S.aBuy === 'same' ? S.dc : S.aBuy;
+    const buyOk = dc => buy === 'all' || dc === buy;
+    const rows = d.arb.map(x => arbEval(x, home, wdc, buyOk)).filter(x => x &&
+      x.profit >= S.aMin && x.vel >= S.aVel && (!S.fresh || (x.seen || 0) >= freshCut));
+    const key = { daily: x => -x.daily, profit: x => -x.profit, ratio: x => -x.ratio, vel: x => -x.vel }[S.aSort];
+    return rows.sort((a, b) => key(a) - key(b));
+  }
+  function aCard(x) {
+    const n = names[x.item] || ('#' + x.item);
+    const old = (Date.now() - (x.seen || 0)) > 3 * 86400000;
+    const stock = x.vel > 0 ? x.homeOnSale / x.vel : 999;
+    const badges = [
+      x.hq ? '<span class="b hq">HQ</span>' : '',
+      x.homeOnSale === 0 ? `<span class="b scarce">${esc(x.home)} 没人在卖</span>`
+        : stock > 7 ? `<span class="b old">${esc(x.home)} 已经有 ${fmt(x.homeOnSale)} 个在卖，竞争大</span>` : '',
+      x.srcDc && x.srcDc !== S.dc ? `<span class="b book">要超域旅行去 ${esc(x.srcDc)} 买</span>` : '',
+      old ? `<span class="b old">便宜挂单是 ${ago(x.seen)}看到的</span>` : '',
+      x.ratio > 3 ? '<span class="b old">差价大得离谱，可能是个别高价成交或挂错价，先在游戏里确认</span>' : '',
+    ].join('');
+    const cheap = x.cheap.slice(0, 3).map(([p, q]) => `${q} 个 × ${fmt(p)}`).join('、');
+    return `<article class="card">
+      <div class="top">
+        <div>
+          <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a></div>
+          <div class="badges">${badges}</div>
+        </div>
+        <div class="profit"><div class="v">+${fmt(x.profit)}</div><div class="l">每个差价（已扣税）</div></div>
+      </div>
+      <div class="route">在 <b>${esc(x.src)}</b>${x.srcDc ? `（${esc(x.srcDc)}）` : ''} 买 <b>${fmt(x.buy)}</b> <span class="arrow">→</span> 拿到 <b>${esc(x.home)}</b> 卖 <b>${fmt(x.sell)}</b></div>
+      <div class="stats">
+        <div class="stat"><div class="l">利润率</div><div class="v">${pct(x.ratio)}</div></div>
+        <div class="stat"><div class="l">每天卖出（${esc(x.home)}）</div><div class="v">${x.vel >= 10 ? fmt(x.vel) : x.vel.toFixed(1)} 个</div></div>
+        <div class="stat"><div class="l">能赚钱的挂单</div><div class="v">${fmt(x.units)}${x.cheap.length >= 5 ? '+' : ''} 个</div></div>
+        <div class="stat"><div class="l">每天能赚</div><div class="v">${fmt(x.daily)}</div></div>
+        <div class="stat"><div class="l">最近成交</div><div class="v">${ago(x.last)}</div></div>
+      </div>
+      <div class="where">${esc(x.src)} 便宜的挂单：<b>${cheap}</b>${x.cheap.length > 3 ? ' 等' : ''} · ${esc(x.home)} 最近 15 天成交 ${x.cnt} 次</div>
+    </article>`;
+  }
+
   function render() {
     const d = cache[S.dc]; if (!d) return;
     names = d.names || {};
     drawWorld();
     document.querySelectorAll('.days').forEach(e => e.textContent = d.days || 30);
-    const g = S.mode === 'gather';
-    const rows = g ? gFiltered() : filtered();
+    const g = S.mode === 'gather', a = S.mode === 'arb';
+    const rows = a ? aFiltered() : g ? gFiltered() : filtered();
     const w = curWorld();
-    $('count').textContent = `${S.dc}${w ? ' · ' + w : ''}：找到 ${rows.length} ${g ? '种采集物' : '个配方'}`;
+    $('count').textContent = `${S.dc}${w ? ' · ' + w : ''}：找到 ${rows.length} ${a ? '样值得搬的东西' : g ? '种采集物' : '个配方'}`;
     $('gen').textContent = `数据生成于 ${ago(d.generated)}`;
-    const empty = g
+    const empty = a
+      ? (d.arb ? '这个条件下暂时没有值得搬的东西，试试放宽“每个至少赚”或“每天卖出”的条件。' : '这份数据还没有搬砖信息，等下一次自动更新后就有了。')
+      : g
       ? (d.gather ? '这个条件下暂时没有合适的采集物，试试放宽“单价”或“每天卖出”的条件。' : '这份数据还没有采集信息，等下一次自动更新后就有了。')
       : '这个条件下暂时没有合适的配方，试试放宽“材料成本”或“每天卖出”的条件。';
     shownRows = rows;
     $('list').innerHTML = rows.length
-      ? rows.slice(0, S.shown).map(g ? gCard : card).join('')
+      ? rows.slice(0, S.shown).map(a ? aCard : g ? gCard : card).join('')
       : `<div class="empty">${empty}${w ? '<br>也可能是 ' + esc(w) + ' 最近这些东西没什么人买，可以切回“整个大区”看看。' : ''}</div>`;
     $('more').hidden = rows.length <= S.shown;
   }
