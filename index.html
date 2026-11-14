@@ -58,6 +58,7 @@
   }
   .tab.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
   .worldbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 12px; font-size: 13px; color: var(--muted); }
+  .worldbar[hidden] { display: none; }
   .worldbar select {
     font: inherit; font-size: 14px; color: var(--ink); background: var(--panel);
     border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; cursor: pointer;
@@ -348,6 +349,7 @@
   }
   function set(k, v) {
     S[k] = v; store.set(k, v); S.shown = PAGE;
+    if (k === 'dc') $('worldBar').hidden = true;  // 新大区的数据加载好之前先藏起来，免得显示上一个大区的服
     drawControls();
     if (k === 'dc') load(); else render();
   }
@@ -358,10 +360,11 @@
   $('more').onclick = () => { S.shown += PAGE; render(); };
 
   // 用 <script> 加载数据：直接双击打开网页（file://）和放到网站上都能用
-  function loadScript(src) {
+  function loadScript(src, fresh) {
     return new Promise((ok, fail) => {
       const s = document.createElement('script');
-      s.src = src + '?t=' + Math.floor(Date.now() / 600000); // 每 10 分钟换一次，避免浏览器一直用旧数据
+      // 平时每 10 分钟换一次地址，避免浏览器一直用旧数据；fresh = 强制拿最新的
+      s.src = src + '?t=' + (fresh ? Date.now() : Math.floor(Date.now() / 600000));
       s.onload = ok;
       s.onerror = () => fail(new Error('还没有这个大区的数据'));
       document.head.appendChild(s);
@@ -373,8 +376,14 @@
     try {
       if (!cache[S.dc]) {
         const want = S.dc;
-        await loadScript('data/' + encodeURIComponent(want) + '.js');
-        cache[want] = (window.CRAFT_DATA || {})[want];
+        const src = 'data/' + encodeURIComponent(want) + '.js';
+        await loadScript(src);
+        let d = (window.CRAFT_DATA || {})[want];
+        // 浏览器可能还留着旧版数据（格式旧、或者超过 7 小时没更新）：强制重新拿一次最新的
+        if (d && (!d.days || Date.now() - d.generated > 7 * 3600000)) {
+          try { await loadScript(src, true); d = window.CRAFT_DATA[want] || d; } catch (e) {}
+        }
+        cache[want] = d;
         if (!cache[want]) throw new Error('数据文件格式不对');
         if (want !== S.dc) return;
       }
@@ -406,7 +415,7 @@
   }
   function drawWorld() {
     const d = cache[S.dc], bar = $('worldBar'), sel = $('world');
-    if (!d || !d.worlds || !d.worlds.length) { bar.hidden = true; return; }
+    if (!d || !d.worlds || !d.worlds.length) { bar.hidden = true; sel.innerHTML = ''; return; }
     bar.hidden = false;
     const w = curWorld();
     sel.innerHTML = '<option value="">整个大区</option>' +
