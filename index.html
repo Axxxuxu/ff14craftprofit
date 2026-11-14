@@ -141,6 +141,44 @@
     border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: bold;
     padding: 8px 22px; border-radius: 999px; cursor: pointer;
   }
+  .shopbtn {
+    margin-top: 6px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent);
+    font: inherit; font-size: 12px; font-weight: bold; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+  }
+  .modal.wide { max-width: 640px; }
+  .shop .sub { color: var(--muted); font-size: 13px; margin: -4px 0 10px; }
+  .shop .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; font-size: 13px; }
+  .shop .row > .k { color: var(--muted); min-width: 4.5em; }
+  .shop select {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; max-width: 100%;
+  }
+  .shop .tip { background: var(--good-soft); color: var(--good); border-radius: 8px; padding: 6px 10px; font-size: 13px; margin: 6px 0; }
+  .shop .warn { background: var(--accent-soft); color: var(--warn); border-radius: 8px; padding: 6px 10px; font-size: 13px; margin: 6px 0; }
+  .shop .modes2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .shop .modes2 button {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 10px;
+    padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+  }
+  .shop .modes2 button b { display: block; font-size: 14px; }
+  .shop .modes2 button.on { border-color: var(--accent); background: var(--accent-soft); }
+  .shop .stop { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+  .shop .stop h4 { margin: 0 0 4px; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+  .shop .stop h4 span { color: var(--muted); font-weight: normal; font-size: 13px; }
+  .shop .buy { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 6px 0; border-top: 1px dashed var(--line); font-size: 13px; }
+  .shop .stop h4 + .buy { border-top: 0; }
+  .shop .buy .m { color: var(--muted); font-size: 12px; }
+  .shop .buy .gone {
+    border: 1px solid var(--accent); background: var(--panel); color: var(--accent); font: inherit; font-size: 12px;
+    font-weight: bold; border-radius: 8px; padding: 3px 9px; cursor: pointer; align-self: start; white-space: nowrap;
+  }
+  .shop .buy .gone:hover { background: var(--accent-soft); }
+  .shop .guide { border: 1px dashed var(--accent); border-radius: 8px; padding: 6px 10px; font-size: 13px; margin: 6px 0 4px; }
+  .shop .guide b { color: var(--accent); }
+  .shop .total { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .shop .total b { color: var(--accent); font-size: 17px; }
+  .shop .help { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+  .ghost { border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; padding: 7px 16px; border-radius: 999px; cursor: pointer; }
   .help-link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
 
   @media (max-width: 640px) {
@@ -164,6 +202,7 @@
     </ol>
     <h3>更新记录</h3>
     <ul class="log">
+      <li><span class="d">11-14</span><span>新增“购物清单”：每个配方旁边点一下，实时查四个大区的挂单，告诉你先去哪个服、再去哪个服买材料。</span></li>
       <li><span class="d">11-14</span><span>新增“我的服”：大区下面可以选具体服务器，卖价和销量按你的服算。</span></li>
       <li><span class="d">11-14</span><span>售价和每天卖出数量改成按最近 15 天的成交算（原来是 30 天），更贴近现在的行情。</span></li>
       <li><span class="d">11-14</span><span>新增打开网站时的注意事项弹窗。</span></li>
@@ -173,6 +212,17 @@
     <div class="foot">
       <label class="check"><input type="checkbox" id="noticeSkip"> 以后不再自动弹出</label>
       <button class="ok" id="noticeOk">知道了</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="shopBg" hidden>
+  <div class="modal wide shop" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
+    <h2 id="shopTitle">🛒 购物清单</h2>
+    <div id="shopBody"></div>
+    <div class="foot">
+      <button class="ghost" id="shopRefresh">重新查价</button>
+      <button class="ok" id="shopClose">关闭</button>
     </div>
   </div>
 </div>
@@ -306,6 +356,7 @@
   }
 
   let names = {};
+  let shownRows = [];
   const cache = {};
 
   function chips(el, opts, cur, onPick) {
@@ -455,7 +506,7 @@
     return rows.sort((a, b) => key(a) - key(b));
   }
 
-  function card(x) {
+  function card(x, i) {
     const n = names[x.item] || ('#' + x.item);
     const stars = x.st ? '★'.repeat(x.st) : '';
     const old = (Date.now() - (x.upd || 0)) > 3 * 86400000;
@@ -477,7 +528,7 @@
           <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a></div>
           <div class="badges">${badges}</div>
         </div>
-        <div class="profit"><div class="v">+${fmt(x.profit)}</div><div class="l">单件利润</div></div>
+        <div class="profit"><div class="v">+${fmt(x.profit)}</div><div class="l">单件利润</div><button class="shopbtn" data-i="${i}">🛒 购物清单</button></div>
       </div>
       <div class="stats">
         <div class="stat"><div class="l">售价</div><div class="v">${fmt(x.price)}</div></div>
@@ -558,11 +609,233 @@
     const empty = g
       ? (d.gather ? '这个条件下暂时没有合适的采集物，试试放宽“单价”或“每天卖出”的条件。' : '这份数据还没有采集信息，等下一次自动更新后就有了。')
       : '这个条件下暂时没有合适的配方，试试放宽“材料成本”或“每天卖出”的条件。';
+    shownRows = rows;
     $('list').innerHTML = rows.length
       ? rows.slice(0, S.shown).map(g ? gCard : card).join('')
       : `<div class="empty">${empty}${w ? '<br>也可能是 ' + esc(w) + ' 最近这些东西没什么人买，可以切回“整个大区”看看。' : ''}</div>`;
     $('more').hidden = rows.length <= S.shown;
   }
+
+  // ---------- 购物清单 ----------
+  // 打开时直接向 Universalis 实时查四个大区的挂单（不用网站 6 小时一次的数据），再排路线。
+  // 游戏里买挂单必须整单买走，买家另付 5% 税，这两点都算进去了。
+  const SHOP_TIMES = [1, 3, 5, 10];
+  const TOL = 1.2; // “少跑路”：比最便宜多花不超过 20%，就尽量在同一个服买齐
+  const shop = { row: null, times: store.get('shopTimes', 1), dc: null, mode: store.get('shopMode', 'few'), data: {}, ban: {}, err: {} };
+
+  async function shopFetch(dc, ids) {
+    const url = 'https://universalis.app/api/v2/' + encodeURIComponent(dc) + '/' + ids.join(',') + '?listings=80&entries=0';
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('查询失败（' + r.status + '）');
+    const j = await r.json();
+    const items = ids.length > 1 ? (j.items || {}) : { [ids[0]]: j };
+    const out = {};
+    ids.forEach(id => {
+      out[id] = ((items[id] || {}).listings || []).map(l => ({
+        w: l.worldName, p: l.pricePerUnit, q: l.quantity, hq: !!l.hq,
+        cost: (l.total || l.pricePerUnit * l.quantity) + (l.tax || 0), t: (l.lastReviewTime || 0) * 1000,
+      }));
+    });
+    return out;
+  }
+
+  // 从挂单里挑出要买的几单（每单必须整单买），在“买够 need 个”的前提下总花费最少；买不够返回 null。
+  // 用动态规划精确算：状态 = 已经买到多少个（超过 need 的都算作 need）。
+  function pick(ls, need) {
+    const n = ls.length, INF = Infinity;
+    let dp = new Array(need + 1).fill(INF); dp[0] = 0;
+    const from = [];
+    for (let i = 0; i < n; i++) {
+      const nd = dp.slice(), fr = new Int32Array(need + 1).fill(-1), { q, cost } = ls[i];
+      for (let s = 0; s <= need; s++) {
+        if (dp[s] === INF || s === need) continue;
+        const t = Math.min(need, s + q);
+        if (dp[s] + cost < nd[t]) { nd[t] = dp[s] + cost; fr[t] = s; }
+      }
+      from.push(fr); dp = nd;
+    }
+    if (dp[need] === INF) return null;
+    const got = [];
+    for (let i = n - 1, t = need; i >= 0 && t > 0; i--) {
+      if (from[i][t] !== -1) { got.push(ls[i]); t = from[i][t]; }
+    }
+    return got;
+  }
+  const sum = ls => ls.reduce((a, l) => a + l.cost, 0);
+
+  // 给一个大区排路线。mode: cheap = 最省钱（可以拆到几个服买）；few = 少跑几个服
+  function plan(dc, mode) {
+    const d = shop.data[dc]; if (!d) return null;
+    const ban = shop.ban[dc] || {};
+    const need = {};
+    shop.row.ings.forEach(([id, amt]) => need[id] = (need[id] || 0) + amt * shop.times);
+    const mats = Object.keys(need).map(id => ({ id: +id, need: need[id] }));
+    const allowed = m => (d[m.id] || []).filter(l => !(ban[m.id] || []).includes(l.w));
+    const best = {};
+    mats.forEach(m => { const g = pick(allowed(m), m.need); best[m.id] = g ? sum(g) : null; });
+    const res = { buys: [], missing: mats.filter(m => best[m.id] == null) };
+    let todo = mats.filter(m => best[m.id] != null);
+    const assign = (m, ls) => ls.forEach(l => res.buys.push({ id: m.id, need: m.need, ...l }));
+    if (mode === 'few') {
+      while (todo.length) {
+        const worlds = {};
+        todo.forEach(m => {
+          const byW = {};
+          allowed(m).forEach(l => (byW[l.w] = byW[l.w] || []).push(l));
+          Object.entries(byW).forEach(([w, ls]) => {
+            const g = pick(ls, m.need);
+            if (g && sum(g) <= best[m.id] * TOL) (worlds[w] = worlds[w] || []).push([m, g]);
+          });
+        });
+        const cost = e => e[1].reduce((a, [, g]) => a + sum(g), 0);
+        const ranked = Object.entries(worlds).sort((a, b) => b[1].length - a[1].length || cost(a) - cost(b));
+        if (!ranked.length) break;
+        ranked[0][1].forEach(([m, g]) => assign(m, g));
+        const done = new Set(ranked[0][1].map(([m]) => m.id));
+        todo = todo.filter(m => !done.has(m.id));
+      }
+    }
+    todo.forEach(m => assign(m, pick(allowed(m), m.need)));
+    res.total = sum(res.buys);
+    res.worlds = [...new Set(res.buys.map(b => b.w))];
+    if (mode === 'cheap') { // 整单买的限制下，偶尔集中在一个服反而更便宜：取两者中更便宜的
+      const f = plan(dc, 'few');
+      if (f.total < res.total) return f;
+    }
+    return res;
+  }
+
+  // 备选：路线里没用到的另一个服，在那里买够这样材料最少要花多少
+  function backup(id, need, usedWorlds) {
+    const ban = (shop.ban[shop.dc] || {})[id] || [];
+    const byW = {};
+    (shop.data[shop.dc][id] || []).filter(l => !usedWorlds.includes(l.w) && !ban.includes(l.w))
+      .forEach(l => (byW[l.w] = byW[l.w] || []).push(l));
+    const alt = Object.entries(byW).map(([w, ls]) => [w, pick(ls, need)]).filter(([, g]) => g)
+      .sort((a, b) => sum(a[1]) - sum(b[1]))[0];
+    return alt ? `备选：${esc(alt[0])} 买够要 ${fmt(sum(alt[1]))} 金` : '其他服都不够买，没有备选';
+  }
+
+  function drawShop() {
+    const x = shop.row, body = $('shopBody');
+    const nm = id => esc(names[id] || '#' + id);
+    $('shopTitle').textContent = '🛒 购物清单 · ' + (names[x.item] || '#' + x.item);
+    const totals = {};
+    DCS.forEach(dc => { const p = plan(dc, 'cheap'); if (p && !p.missing.length) totals[dc] = p.total; });
+    const cheapDc = Object.keys(totals).sort((a, b) => totals[a] - totals[b])[0];
+    const opts = DCS.map(dc => {
+      const t = shop.data[dc] ? (dc in totals ? '约 ' + fmt(totals[dc]) + ' 金' : '买不齐') : shop.err[dc] ? '查询失败' : '查询中…';
+      return `<option value="${dc}"${dc === shop.dc ? ' selected' : ''}>${dc} · ${t}${dc === cheapDc ? ' ✅ 最便宜' : ''}</option>`;
+    }).join('');
+    let h = `<div class="sub">做 ${shop.times} 次需要：${x.ings.map(([id, amt]) => `${nm(id)} ×${amt * shop.times}`).join('、')}</div>
+      <div class="row"><span class="k">做几次</span>${SHOP_TIMES.map(t => `<button class="chip${t === shop.times ? ' on' : ''}" data-times="${t}">${t} 次</button>`).join('')}</div>
+      <div class="row"><span class="k">我现在在</span><select id="shopDc">${opts}</select><span>大区买材料</span></div>`;
+    const d = shop.data[shop.dc];
+    if (!d) {
+      h += `<div class="empty">${shop.err[shop.dc] ? '查询失败：' + esc(shop.err[shop.dc]) + '，点“重新查价”再试一次' : '正在查 ' + esc(shop.dc) + ' 现在的挂单…'}</div>`;
+      body.innerHTML = h; return;
+    }
+    const pf = plan(shop.dc, 'few'), pc = plan(shop.dc, 'cheap');
+    h += `<div class="modes2">
+      <button data-mode2="few" class="${shop.mode === 'few' ? 'on' : ''}"><b>少跑路</b>跑 ${pf.worlds.length} 个服 · ${fmt(pf.total)} 金</button>
+      <button data-mode2="cheap" class="${shop.mode === 'cheap' ? 'on' : ''}"><b>最省钱</b>跑 ${pc.worlds.length} 个服 · ${fmt(pc.total)} 金</button>
+    </div>`;
+    const p = shop.mode === 'few' ? pf : pc;
+    h += `<div class="guide">📌 下面是<b>刚才实时查到的挂单</b>。数据可能有延迟，到了某个服发现东西已经被买走了，点那一行右边的 <b>🔄 没货了？换一家</b>，会自动换下一家、重新生成路线。</div>`;
+    // 每样材料：一共买了多少、多买了多少、多买部分大约多少钱（按这样材料买入的平均单价算）
+    const over = {};
+    p.buys.forEach(b => { const o = (over[b.id] = over[b.id] || { q: 0, cost: 0, need: b.need }); o.q += b.q; o.cost += b.cost; });
+    let overCost = 0, worst = null;
+    Object.entries(over).forEach(([id, o]) => {
+      o.extra = Math.max(0, o.q - o.need);
+      o.extraCost = o.extra ? o.cost / o.q * o.extra : 0;
+      overCost += o.extraCost;
+      if (o.extra && (!worst || o.extraCost > worst.extraCost)) worst = { id: +id, ...o };
+    });
+    const byW = {};
+    p.buys.forEach(b => (byW[b.w] = byW[b.w] || []).push(b));
+    Object.keys(byW).sort((a, b) => sum(byW[b]) - sum(byW[a])).forEach((w, k) => {
+      const g = {};
+      byW[w].forEach(b => (g[b.id] = g[b.id] || []).push(b));
+      h += `<div class="stop"><h4>${'①②③④⑤⑥⑦⑧⑨'[k] || (k + 1) + '.'} ${esc(w)}<span>${Object.keys(g).length} 样 · ${fmt(sum(byW[w]))} 金</span></h4>`;
+      Object.entries(g).forEach(([id, bs]) => {
+        const q = bs.reduce((a, b) => a + b.q, 0);
+        const usedW = [...new Set(p.buys.filter(b => b.id == id).map(b => b.w))];
+        const o = over[id];
+        const others = usedW.filter(v => v !== w).map(v => {
+          const n2 = p.buys.filter(b => b.id == id && b.w === v).reduce((a, b) => a + b.q, 0);
+          return `${esc(v)} ${n2} 个`;
+        }).join('、');
+        const split = usedW.length > 1
+          ? `（一共需要 ${o.need} 个：这里 ${q} 个 + ${others}${o.extra ? `；整单买合计多 ${o.extra} 个，约 ${fmt(o.extraCost)} 金` : ''}）`
+          : o.extra ? `（需要 ${o.need} 个，多买 ${o.extra} 个，约 ${fmt(o.extraCost)} 金）` : '';
+        h += `<div class="buy"><div>${nm(id)} <b>×${q}</b>${split}
+            <div class="m">买 ${bs.length} 单：${bs.map(b => `${b.q} 个 × ${fmt(b.p)}${b.hq ? ' HQ' : ''}`).join('、')} · 挂单 ${ago(Math.max(...bs.map(b => b.t)))}看到的</div>
+            <div class="m">${backup(+id, bs[0].need, usedW)}</div></div>
+          <button class="gone" data-gone="${id}" data-w="${esc(w)}" title="到了这个服发现已经被别人买走了？点这里，会换下一家重新排路线">🔄 没货了？换一家</button></div>`;
+      });
+      h += '</div>';
+    });
+    if (p.missing.length) {
+      h += `<div class="warn">⚠ ${p.missing.map(m => nm(m.id)).join('、')} 在 ${esc(shop.dc)} 的挂单不够，买不齐。可以少做几次，或者自己采集 / 制作这个材料。</div>`;
+    }
+    const units = shop.times * x.n;
+    h += `<div class="total"><span>实际要花（已含 5% 税）</span><b>${fmt(p.total)} 金</b></div>`;
+    if (overCost >= 1) h += `<div class="sub" style="margin:4px 0 0">其中整单多买的部分：约 ${fmt(overCost)} 金</div>`;
+    if (!p.missing.length) {
+      const per = p.total / units;
+      h += `<div class="sub" style="margin-top:4px">做出 ${units} 个，按实际花的钱算每个成本约 ${fmt(per)} 金；按 ${esc(S.dc)}${curWorld() ? ' · ' + esc(curWorld()) : ''} 的售价 ${fmt(x.price)} 算，扣税后每个${x.price * 0.95 - per >= 0 ? '约赚 ' + fmt(x.price * 0.95 - per) : '约亏 ' + fmt(per - x.price * 0.95)} 金。</div>`;
+    }
+    if (worst && overCost > p.total / 2) {
+      const amt = x.ings.filter(([id]) => id === worst.id).reduce((a, [, n]) => a + n, 0);
+      const k = Math.floor(worst.q / amt);
+      if (k > shop.times && k <= 99) h += `<div class="sub" style="margin-top:4px">做 ${k} 次正好能把这单${nm(worst.id)}用完，不会多买。</div>`;
+    }
+    h += `<div class="help">· 价格是打开清单时实时查的，但挂单要有人看过才会更新，到了现场以游戏里为准。<br>
+      · 到了发现被别人买走了：点那一行的“🔄 没货了？换一家”，会自动换下一家、重新排路线。“备选”是下一个最便宜的服。<br>
+      · 整个大区都买不齐：可以少做几次，或者自己采集 / 制作这个材料。<br>
+      · 游戏里挂单必须整单买，清单上显示的是整单的数量和价格，有时会比需要的多一些。<br>
+      · 服的顺序按花钱多少排，先去大头；实际先去哪个都行。</div>`;
+    body.innerHTML = h;
+  }
+
+  async function shopLoad() {
+    const ids = [...new Set(shop.row.ings.map(([id]) => id))];
+    shop.data = {}; shop.err = {};
+    drawShop();
+    const row = shop.row;
+    await Promise.all(DCS.map(async dc => {
+      try { const d = await shopFetch(dc, ids); if (shop.row === row) shop.data[dc] = d; }
+      catch (e) { if (shop.row === row) shop.err[dc] = e.message || '网络错误'; }
+      if (shop.row === row) drawShop();
+    }));
+  }
+
+  $('list').addEventListener('click', e => {
+    const b = e.target.closest('.shopbtn'); if (!b) return;
+    shop.row = shownRows[+b.dataset.i]; shop.ban = {};
+    shop.dc = store.get('shopDc', S.dc);
+    $('shopBg').hidden = false;
+    shopLoad();
+  });
+  $('shopBody').addEventListener('click', e => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.times) { shop.times = +t.dataset.times; store.set('shopTimes', shop.times); drawShop(); }
+    else if (t.dataset.mode2) { shop.mode = t.dataset.mode2; store.set('shopMode', shop.mode); drawShop(); }
+    else if (t.dataset.gone) {
+      const b = (shop.ban[shop.dc] = shop.ban[shop.dc] || {});
+      (b[t.dataset.gone] = b[t.dataset.gone] || []).push(t.dataset.w);
+      drawShop();
+    }
+  });
+  $('shopBody').addEventListener('change', e => {
+    if (e.target.id === 'shopDc') { shop.dc = e.target.value; store.set('shopDc', shop.dc); drawShop(); }
+  });
+  const closeShop = () => { $('shopBg').hidden = true; shop.row = null; };
+  $('shopClose').onclick = closeShop;
+  $('shopRefresh').onclick = () => { shop.ban = {}; shopLoad(); };
+  $('shopBg').onclick = e => { if (e.target === $('shopBg')) closeShop(); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('shopBg').hidden) closeShop(); });
 
   // ---------- 注意事项弹窗 ----------
   const notice = $('notice');
