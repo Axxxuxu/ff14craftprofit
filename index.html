@@ -29,6 +29,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; } /* 防止 display:block/flex 之类的样式把“藏起来”盖掉 */
   html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
@@ -74,6 +75,17 @@
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
     padding: 12px 14px; display: grid; gap: 10px; box-shadow: var(--shadow);
   }
+  .fbar {
+    width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    padding: 10px 14px; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; text-align: left;
+  }
+  .fbar:hover { border-color: var(--accent); }
+  .fbar .sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .fbar .sum b { color: var(--ink); font-weight: normal; }
+  .fbar .tog { flex: none; color: var(--accent); font-weight: bold; }
+  .fbar.open { border-radius: 12px 12px 0 0; border-bottom-style: dashed; box-shadow: none; }
+  .fbar.open + .filters { border-top: 0; border-radius: 0 0 12px 12px; }
   .frow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .frow > label.k { color: var(--muted); font-size: 13px; min-width: 6.5em; }
   .chip {
@@ -252,7 +264,10 @@
     <span id="worldHint"></span>
   </div>
 
-  <section class="filters">
+  <button class="fbar" id="fBar" aria-expanded="false" aria-controls="filters">
+    <span class="sum" id="fSum"></span><span class="tog" id="fTog">筛选 ▾</span>
+  </button>
+  <section class="filters" id="filters" hidden>
     <div class="frow craft-only">
       <label class="k">材料成本 ≤ 售价</label>
       <span id="fRatio"></span>
@@ -344,6 +359,7 @@
     sort: store.get('sort', 'profit'),
     noBook: store.get('noBook', false),
     fresh: store.get('fresh', false),
+    fOpen: store.get('fOpen', false),   // 筛选区是否展开
     mode: store.get('mode', 'craft'),
     gVel: store.get('gVel', 1),
     gJob: store.get('gJob', '全部'),
@@ -360,7 +376,7 @@
   const SUB = {
     craft: '材料在市场上就能买齐、成本远低于售价、最近真有人在买的生产配方。',
     gather: '普通采集点就能挖、市场上卖得上价、最近真有人在买的采集物。',
-    arb: '同一个大区里，别的服挂得便宜、你的服最近 15 天真有人买的东西：从那边便宜买进，搬到你的服卖。',
+    arb: '别的服挂得便宜、你的服最近 15 天真有人买的东西：从那边便宜买进，搬到你的服卖。',
   };
   const H1 = { craft: '搓什么', gather: '挖什么', arb: '搬什么' };
   const A_MINS = [0, 500, 1000, 5000, 10000];
@@ -434,7 +450,33 @@
     $('fNoBook').checked = S.noBook;
     $('fEasy').checked = S.easy;
     $('fFresh').checked = S.fresh;
+    drawFilterBar();
   }
+  // 筛选区默认收起，只显示一行当前条件；点一下展开 / 收起
+  function drawFilterBar() {
+    const lab = (list, v) => (list.find(([k]) => k === v) || [, ''])[1].replace(/（.*）/, '');
+    const velTxt = v => v === 0 ? '每天卖出不限' : `每天 ≥ ${v} 个`;
+    let parts;
+    if (S.mode === 'arb') {
+      const buy = S.aBuy === 'same' || S.aBuy === S.dc ? '本大区买' : S.aBuy === 'all' ? '四个大区买' : S.aBuy + '买';
+      parts = [buy, S.aMin ? `每个 ≥ ${fmt(S.aMin)} 金` : '差价不限', velTxt(S.aVel), '按' + lab(A_SORTS, S.aSort)];
+    } else if (S.mode === 'gather') {
+      parts = [S.gMinPrice ? `单价 ≥ ${fmt(S.gMinPrice)} 金` : '单价不限', velTxt(S.gVel),
+        S.gJob === '全部' ? '采矿和园艺' : S.gJob, '按' + lab(G_SORTS, S.gSort)];
+      if (S.easy) parts.push('只看好挖的');
+    } else {
+      parts = [`成本 ≤ ${pct(S.ratio)}`, velTxt(S.vel), S.job === '全部' ? '全部职业' : S.job, '按' + lab(SORTS, S.sort)];
+      if (S.noBook) parts.push('不要秘籍');
+    }
+    if (S.fresh) parts.push('只看 3 天内的数据');
+    $('fSum').innerHTML = parts.map(p => `<b>${esc(p)}</b>`).join(' · ');
+    $('filters').hidden = !S.fOpen;
+    $('fBar').classList.toggle('open', S.fOpen);
+    $('fBar').setAttribute('aria-expanded', S.fOpen);
+    $('fTog').textContent = S.fOpen ? '收起 ▴' : '筛选 ▾';
+  }
+  $('fBar').onclick = () => { S.fOpen = !S.fOpen; store.set('fOpen', S.fOpen); drawFilterBar(); };
+
   function set(k, v) {
     S[k] = v; store.set(k, v); S.shown = PAGE;
     if (k === 'dc') $('worldBar').hidden = true;  // 新大区的数据加载好之前先藏起来，免得显示上一个大区的服
@@ -671,13 +713,15 @@
     });
     return best;
   }
+  // 手动屏蔽：成交价明显被人刷高的东西（日长石耳坠、红铜冲锋项环、风化短剑、鞣革项环、红铜耳夹）
+  const ARB_BLOCK = new Set([4214, 4305, 1601, 4304, 4198]);
   function aFiltered() {
     const d = cache[S.dc]; if (!d || !d.arb) return [];
     const home = curWorld(), freshCut = Date.now() - 3 * 86400000;
     const wdc = worldDc(d);
     const buy = S.aBuy === 'same' ? S.dc : S.aBuy;
     const buyOk = dc => buy === 'all' || dc === buy;
-    const rows = d.arb.map(x => arbEval(x, home, wdc, buyOk)).filter(x => x &&
+    const rows = d.arb.filter(x => !ARB_BLOCK.has(x[0])).map(x => arbEval(x, home, wdc, buyOk)).filter(x => x &&
       x.profit >= S.aMin && x.vel >= S.aVel && (!S.fresh || (x.seen || 0) >= freshCut));
     const key = { daily: x => -x.daily, profit: x => -x.profit, ratio: x => -x.ratio, vel: x => -x.vel }[S.aSort];
     return rows.sort((a, b) => key(a) - key(b));
@@ -735,6 +779,7 @@
       ? rows.slice(0, S.shown).map(a ? aCard : g ? gCard : card).join('')
       : `<div class="empty">${empty}${w ? '<br>也可能是 ' + esc(w) + ' 最近这些东西没什么人买，可以切回“整个大区”看看。' : ''}</div>`;
     $('more').hidden = rows.length <= S.shown;
+    $('more').textContent = `显示更多（还有 ${Math.max(0, rows.length - S.shown)} 个）`;
   }
 
   // ---------- 购物清单 ----------
