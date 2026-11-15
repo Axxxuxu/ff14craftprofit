@@ -112,6 +112,25 @@
   .b.scarce { background: var(--good-soft); color: var(--good); }
   .b.book { background: var(--accent-soft); color: var(--accent); }
   .b.old { color: var(--warn); }
+  .name .meta { font-size: 12px; font-weight: normal; color: var(--muted); margin-left: 8px; }
+  .line {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 8px; font-size: 13px; color: var(--muted);
+  }
+  .line b { color: var(--ink); font-weight: bold; font-variant-numeric: tabular-nums; }
+  .line .shopbtn { margin-top: 0; }
+  .line .ratio { display: inline-flex; align-items: center; gap: 8px; }
+  .line .ratio { font-size: 14px; }
+  .line .ratio .bar { width: 220px; max-width: 40vw; height: 12px; margin-top: 0; border-radius: 6px; }
+  .line .ratio .bar i { border-radius: 6px; min-width: 6px; }
+  .hls { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+  .hl {
+    background: var(--good-soft); color: var(--good); border-radius: 8px; padding: 3px 10px;
+    font-size: 14px; font-weight: bold;
+  }
+  .hl b { color: inherit; }
+  .hl.stale { background: var(--accent-soft); color: var(--warn); }
+  .card .badges:empty { display: none; }
   .profit { text-align: right; flex: none; }
   .profit .v { font-size: 20px; font-weight: bold; color: var(--good); font-variant-numeric: tabular-nums; }
   .profit .l { font-size: 12px; color: var(--muted); }
@@ -185,6 +204,8 @@
   .shop .buy { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 6px 0; border-top: 1px dashed var(--line); font-size: 13px; }
   .shop .stop h4 + .buy { border-top: 0; }
   .shop .buy .m { color: var(--muted); font-size: 12px; }
+  .shop .xtra { font-size: 12px; color: var(--warn); }
+  .shop details.help summary { font-size: 12px; }
   .shop .buy .gone {
     border: 1px solid var(--accent); background: var(--panel); color: var(--accent); font: inherit; font-size: 12px;
     font-weight: bold; border-radius: 8px; padding: 3px 9px; cursor: pointer; align-self: start; white-space: nowrap;
@@ -300,6 +321,7 @@
       <label class="k">其他</label>
       <label class="check craft-only"><input type="checkbox" id="fNoBook"> 隐藏需要秘籍的配方</label>
       <label class="check gather-only"><input type="checkbox" id="fEasy"> 只看好挖的（普通采集点，不限时、不要传承录）</label>
+      <label class="check"><input type="checkbox" id="fOut"> 只看市场缺货<span class="arb-only">（你的服没人在卖）</span></label>
       <label class="check"><input type="checkbox" id="fFresh"> 只看 3 天内有更新的数据</label>
     </div>
   </section>
@@ -359,6 +381,7 @@
     sort: store.get('sort', 'profit'),
     noBook: store.get('noBook', false),
     fresh: store.get('fresh', false),
+    outOnly: store.get('outOnly', false),   // 只看市场缺货
     fOpen: store.get('fOpen', false),   // 筛选区是否展开
     mode: store.get('mode', 'craft'),
     gVel: store.get('gVel', 1),
@@ -390,6 +413,7 @@
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fmt = n => Math.round(n).toLocaleString('zh-CN');
+  const num = v => v >= 10 ? fmt(v) : (+v).toFixed(1);
   const pct = r => {
     const v = r * 100;
     return (v >= 10 || Number.isInteger(Math.round(v * 10) / 10) && Math.round(v * 10) % 10 === 0 ? Math.round(v) : v.toFixed(1)) + '%';
@@ -450,6 +474,7 @@
     $('fNoBook').checked = S.noBook;
     $('fEasy').checked = S.easy;
     $('fFresh').checked = S.fresh;
+    $('fOut').checked = S.outOnly;
     drawFilterBar();
   }
   // 筛选区默认收起，只显示一行当前条件；点一下展开 / 收起
@@ -468,6 +493,7 @@
       parts = [`成本 ≤ ${pct(S.ratio)}`, velTxt(S.vel), S.job === '全部' ? '全部职业' : S.job, '按' + lab(SORTS, S.sort)];
       if (S.noBook) parts.push('不要秘籍');
     }
+    if (S.outOnly) parts.push('只看缺货');
     if (S.fresh) parts.push('只看 3 天内的数据');
     $('fSum').innerHTML = parts.map(p => `<b>${esc(p)}</b>`).join(' · ');
     $('filters').hidden = !S.fOpen;
@@ -487,6 +513,7 @@
   $('fEasy').onchange = e => set('easy', e.target.checked);
   $('fNoBook').onchange = e => set('noBook', e.target.checked);
   $('fFresh').onchange = e => set('fresh', e.target.checked);
+  $('fOut').onchange = e => set('outOnly', e.target.checked);
   $('more').onclick = () => { S.shown += PAGE; render(); };
 
   // 用 <script> 加载数据：直接双击打开网页（file://）和放到网站上都能用
@@ -568,6 +595,7 @@
       x.vel >= S.vel &&
       (S.job === '全部' || x.job === S.job) &&
       (!S.noBook || !x.book) &&
+      (!S.outOnly || !x.listed) &&
       (!S.fresh || (x.upd || 0) >= freshCut));
     // 同一个成品可能有好几个职业都能做：合并成一张卡片，保留成本最低的配方
     const byItem = new Map();
@@ -592,13 +620,11 @@
     const stars = x.st ? '★'.repeat(x.st) : '';
     const old = (Date.now() - (x.upd || 0)) > 3 * 86400000;
     const badges = [
-      `<span class="b">${esc((x.jobs || [x.job]).join(' / '))} ${x.lv}级${stars}</span>`,
-      x.q === 'hq' ? '<span class="b hq">按 HQ 售价</span>' : '',
+      x.q === 'hq' ? '<span class="b hq">HQ</span>' : '',
       x.n > 1 ? `<span class="b">一次出 ${x.n} 个</span>` : '',
       !x.listed ? '<span class="b scarce">市场缺货</span>' : '',
-      x.book ? `<span class="b book">需要${esc(x.book)}</span>` : '',
-      x.sp ? '<span class="b book">需要专家认证</span>' : '',
-      x.ex ? '<span class="b">高难度配方</span>' : '',
+      x.book ? `<span class="b book">要秘籍</span>` : '',
+      x.sp ? '<span class="b book">要专家</span>' : '',
       old ? `<span class="b old">数据 ${ago(x.upd)}</span>` : '',
     ].join('');
     const ings = x.ings.map(([id, amt, p]) =>
@@ -606,19 +632,20 @@
     return `<article class="card">
       <div class="top">
         <div>
-          <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a></div>
+          <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a><span class="meta">${esc((x.jobs || [x.job]).join(' / '))} ${x.lv}级${stars}</span></div>
           <div class="badges">${badges}</div>
         </div>
-        <div class="profit"><div class="v">+${fmt(x.profit)}</div><div class="l">单件利润</div><button class="shopbtn" data-i="${i}">🛒 购物清单</button></div>
+        <div class="profit"><div class="v">+${fmt(x.profit)}</div><div class="l">每个赚</div></div>
       </div>
-      <div class="stats">
-        <div class="stat"><div class="l">售价</div><div class="v">${fmt(x.price)}</div></div>
-        <div class="stat"><div class="l">材料成本</div><div class="v">${fmt(x.cost)}</div></div>
-        <div class="stat"><div class="l">成本占比</div><div class="v">${pct(x.ratio)}</div><div class="bar"><i style="width:${Math.min(100, x.ratio * 100 * 2)}%"></i></div></div>
-        <div class="stat"><div class="l">每天卖出</div><div class="v">${x.vel >= 10 ? Math.round(x.vel) : x.vel.toFixed(1)} 个</div></div>
-        <div class="stat"><div class="l">最近成交</div><div class="v">${ago(x.lastSale)}</div></div>
+      <div class="line">
+        <span>卖 <b>${fmt(x.price)}</b> · 成本 <b>${fmt(x.cost)}</b></span>
+        <span class="ratio" title="材料成本占售价的比例，越短越赚"><span class="bar"><i style="width:${Math.min(100, x.ratio * 100 * 2)}%"></i></span>成本占 <b>${pct(x.ratio)}</b></span>
       </div>
-      <details><summary>材料清单${x.onSale ? ` · 市场上还有 ${fmt(x.onSale)} 个在卖` : ''}</summary><ul class="ings">${ings}</ul></details>
+      <div class="line">
+        <span class="hls"><span class="hl">每天卖 <b>${num(x.vel)}</b> 个</span><span class="hl${Date.now() - (x.lastSale || 0) > 3 * 86400000 ? ' stale' : ''}">${ago(x.lastSale)}成交</span></span>
+        <button class="shopbtn" data-i="${i}">🛒 清单</button>
+      </div>
+      <details><summary>材料${x.book ? `（${esc(x.book)}）` : ''}${x.onSale ? ` · 市场上还有 ${fmt(x.onSale)} 个在卖` : ''}</summary><ul class="ings">${ings}</ul></details>
     </article>`;
   }
 
@@ -633,6 +660,7 @@
       x.vel >= S.gVel &&
       (S.gJob === '全部' || x.jobs.includes(S.gJob)) &&
       (!S.easy || x.easy) &&
+      (!S.outOnly || x.onSale === 0) &&
       (!S.fresh || (x.upd || 0) >= freshCut));
     const key = {
       value: x => -(x.price * x.vel),
@@ -648,32 +676,24 @@
     const old = (Date.now() - (x.upd || 0)) > 3 * 86400000;
     const days = scarcity(x);
     const badges = [
-      `<span class="b">${esc(x.jobs.join(' / '))} ${x.lv}级</span>`,
       x.onSale === 0 ? '<span class="b scarce">市场缺货</span>'
         : days < 1 ? '<span class="b scarce">库存紧张</span>' : '',
-      x.timed ? '<span class="b book">限时采集点</span>' : '',
-      x.book ? `<span class="b book">需要${esc(x.book)}</span>` : '',
+      x.timed ? '<span class="b book">限时</span>' : '',
+      x.book ? `<span class="b book">要${esc(x.book)}</span>` : '',
       old ? `<span class="b old">数据 ${ago(x.upd)}</span>` : '',
     ].join('');
     const zones = x.zones.length
-      ? `<div class="where">在哪挖：<b>${x.zones.map(esc).join('、')}</b>${x.zoneMore ? ` 等 ${x.zones.length + x.zoneMore} 个地区` : ''}</div>`
+      ? ` · 在 <b>${x.zones.map(esc).join('、')}</b>${x.zoneMore ? ` 等 ${x.zones.length + x.zoneMore} 处` : ''}`
       : '';
     return `<article class="card">
       <div class="top">
         <div>
-          <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a></div>
+          <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a><span class="meta">${esc(x.jobs.join(' / '))} ${x.lv}级</span></div>
           <div class="badges">${badges}</div>
         </div>
-        <div class="profit"><div class="v price">${fmt(x.price)}</div><div class="l">单价（金）</div></div>
+        <div class="profit"><div class="v price">${fmt(x.price)}</div><div class="l">单价</div></div>
       </div>
-      <div class="stats">
-        <div class="stat"><div class="l">每天卖出</div><div class="v">${x.vel >= 10 ? fmt(x.vel) : x.vel.toFixed(1)} 个</div></div>
-        <div class="stat"><div class="l">每天成交额</div><div class="v">${fmt(x.price * x.vel)}</div></div>
-        <div class="stat"><div class="l">市场在卖</div><div class="v">${fmt(x.onSale)}${x.capped ? '+' : ''} 个</div></div>
-        <div class="stat"><div class="l">库存够卖</div><div class="v">${x.capped ? '充足' : days >= 999 ? '—' : days < 1 ? '不到 1 天' : Math.round(days) + ' 天'}</div></div>
-        <div class="stat"><div class="l">最近成交</div><div class="v">${ago(x.lastSale)}</div></div>
-      </div>
-      ${zones}
+      <div class="line"><span>每天 <b>${num(x.vel)}</b> 个 · 在卖 <b>${fmt(x.onSale)}${x.capped ? '+' : ''}</b> 个 · ${ago(x.lastSale)}成交${zones}</span></div>
     </article>`;
   }
 
@@ -722,7 +742,8 @@
     const buy = S.aBuy === 'same' ? S.dc : S.aBuy;
     const buyOk = dc => buy === 'all' || dc === buy;
     const rows = d.arb.filter(x => !ARB_BLOCK.has(x[0])).map(x => arbEval(x, home, wdc, buyOk)).filter(x => x &&
-      x.profit >= S.aMin && x.vel >= S.aVel && (!S.fresh || (x.seen || 0) >= freshCut));
+      x.profit >= S.aMin && x.vel >= S.aVel && (!S.outOnly || x.homeOnSale === 0) &&
+      (!S.fresh || (x.seen || 0) >= freshCut));
     const key = { daily: x => -x.daily, profit: x => -x.profit, ratio: x => -x.ratio, vel: x => -x.vel }[S.aSort];
     return rows.sort((a, b) => key(a) - key(b));
   }
@@ -732,30 +753,22 @@
     const stock = x.vel > 0 ? x.homeOnSale / x.vel : 999;
     const badges = [
       x.hq ? '<span class="b hq">HQ</span>' : '',
-      x.homeOnSale === 0 ? `<span class="b scarce">${esc(x.home)} 没人在卖</span>`
-        : stock > 7 ? `<span class="b old">${esc(x.home)} 已经有 ${fmt(x.homeOnSale)} 个在卖，竞争大</span>` : '',
-      x.srcDc && x.srcDc !== S.dc ? `<span class="b book">要超域旅行去 ${esc(x.srcDc)} 买</span>` : '',
-      old ? `<span class="b old">便宜挂单是 ${ago(x.seen)}看到的</span>` : '',
-      x.ratio > 3 ? '<span class="b old">差价大得离谱，可能是个别高价成交或挂错价，先在游戏里确认</span>' : '',
+      x.homeOnSale === 0 ? `<span class="b scarce">${esc(x.home)} 没人卖</span>`
+        : stock > 7 ? `<span class="b old">竞争大（${fmt(x.homeOnSale)} 个在卖）</span>` : '',
+      x.srcDc && x.srcDc !== S.dc ? `<span class="b book">要超域旅行</span>` : '',
+      old ? `<span class="b old">挂单 ${ago(x.seen)}</span>` : '',
+      x.ratio > 3 ? '<span class="b old">差价很大，先确认</span>' : '',
     ].join('');
-    const cheap = x.cheap.slice(0, 3).map(([p, q]) => `${q} 个 × ${fmt(p)}`).join('、');
     return `<article class="card">
       <div class="top">
         <div>
           <div class="name"><a href="https://universalis.app/market/${x.item}" target="_blank" rel="noopener">${esc(n)}</a></div>
           <div class="badges">${badges}</div>
         </div>
-        <div class="profit"><div class="v">+${fmt(x.profit)}</div><div class="l">每个差价（已扣税）</div></div>
+        <div class="profit"><div class="v">+${fmt(x.profit)}</div><div class="l">每个赚</div></div>
       </div>
-      <div class="route">在 <b>${esc(x.src)}</b>${x.srcDc ? `（${esc(x.srcDc)}）` : ''} 买 <b>${fmt(x.buy)}</b> <span class="arrow">→</span> 拿到 <b>${esc(x.home)}</b> 卖 <b>${fmt(x.sell)}</b></div>
-      <div class="stats">
-        <div class="stat"><div class="l">利润率</div><div class="v">${pct(x.ratio)}</div></div>
-        <div class="stat"><div class="l">每天卖出（${esc(x.home)}）</div><div class="v">${x.vel >= 10 ? fmt(x.vel) : x.vel.toFixed(1)} 个</div></div>
-        <div class="stat"><div class="l">能赚钱的挂单</div><div class="v">${fmt(x.units)}${x.cheap.length >= 5 ? '+' : ''} 个</div></div>
-        <div class="stat"><div class="l">每天能赚</div><div class="v">${fmt(x.daily)}</div></div>
-        <div class="stat"><div class="l">最近成交</div><div class="v">${ago(x.last)}</div></div>
-      </div>
-      <div class="where">${esc(x.src)} 便宜的挂单：<b>${cheap}</b>${x.cheap.length > 3 ? ' 等' : ''} · ${esc(x.home)} 最近 15 天成交 ${x.cnt} 次</div>
+      <div class="route"><b>${esc(x.src)}</b>${x.srcDc && x.srcDc !== S.dc ? `（${esc(x.srcDc)}）` : ''} 买 ${fmt(x.buy)} <span class="arrow">→</span> <b>${esc(x.home)}</b> 卖 ${fmt(x.sell)}</div>
+      <div class="line"><span>利润率 <b>${pct(x.ratio)}</b> · 每天 <b>${num(x.vel)}</b> 个 · 便宜货 <b>${fmt(x.units)}${x.cheap.length >= 5 ? '+' : ''}</b> 个 · ${ago(x.last)}成交</span></div>
     </article>`;
   }
 
@@ -879,7 +892,7 @@
       .forEach(l => (byW[l.w] = byW[l.w] || []).push(l));
     const alt = Object.entries(byW).map(([w, ls]) => [w, pick(ls, need)]).filter(([, g]) => g)
       .sort((a, b) => sum(a[1]) - sum(b[1]))[0];
-    return alt ? `备选：${esc(alt[0])} 买够要 ${fmt(sum(alt[1]))} 金` : '其他服都不够买，没有备选';
+    return alt ? `备选 ${esc(alt[0])} ${fmt(sum(alt[1]))}` : '没有备选';
   }
 
   function drawShop() {
@@ -893,21 +906,20 @@
       const t = shop.data[dc] ? (dc in totals ? '约 ' + fmt(totals[dc]) + ' 金' : '买不齐') : shop.err[dc] ? '查询失败' : '查询中…';
       return `<option value="${dc}"${dc === shop.dc ? ' selected' : ''}>${dc} · ${t}${dc === cheapDc ? ' ✅ 最便宜' : ''}</option>`;
     }).join('');
-    let h = `<div class="sub">做 ${shop.times} 次需要：${x.ings.map(([id, amt]) => `${nm(id)} ×${amt * shop.times}`).join('、')}</div>
-      <div class="row"><span class="k">做几次</span>${SHOP_TIMES.map(t => `<button class="chip${t === shop.times ? ' on' : ''}" data-times="${t}">${t} 次</button>`).join('')}</div>
-      <div class="row"><span class="k">我现在在</span><select id="shopDc">${opts}</select><span>大区买材料</span></div>`;
+    let h = `<div class="row">${SHOP_TIMES.map(t => `<button class="chip${t === shop.times ? ' on' : ''}" data-times="${t}">做 ${t} 次</button>`).join('')}
+      <select id="shopDc" aria-label="在哪个大区买">${opts}</select></div>`;
     const d = shop.data[shop.dc];
     if (!d) {
       h += `<div class="empty">${shop.err[shop.dc] ? '查询失败：' + esc(shop.err[shop.dc]) + '，点“重新查价”再试一次' : '正在查 ' + esc(shop.dc) + ' 现在的挂单…'}</div>`;
       body.innerHTML = h; return;
     }
     const pf = plan(shop.dc, 'few'), pc = plan(shop.dc, 'cheap');
-    h += `<div class="modes2">
-      <button data-mode2="few" class="${shop.mode === 'few' ? 'on' : ''}"><b>少跑路</b>跑 ${pf.worlds.length} 个服 · ${fmt(pf.total)} 金</button>
-      <button data-mode2="cheap" class="${shop.mode === 'cheap' ? 'on' : ''}"><b>最省钱</b>跑 ${pc.worlds.length} 个服 · ${fmt(pc.total)} 金</button>
+    h += `<div class="row">
+      <button data-mode2="few" class="chip${shop.mode === 'few' ? ' on' : ''}">少跑路 · ${pf.worlds.length} 个服 · ${fmt(pf.total)}</button>
+      <button data-mode2="cheap" class="chip${shop.mode === 'cheap' ? ' on' : ''}">最省钱 · ${pc.worlds.length} 个服 · ${fmt(pc.total)}</button>
     </div>`;
     const p = shop.mode === 'few' ? pf : pc;
-    h += `<div class="guide">📌 下面是<b>刚才实时查到的挂单</b>。数据可能有延迟，到了某个服发现东西已经被买走了，点那一行右边的 <b>🔄 没货了？换一家</b>，会自动换下一家、重新生成路线。</div>`;
+    h += `<div class="sub" style="margin:4px 0 0">刚刚实时查的挂单。到了发现没货，点“换一家”会重新排路线。</div>`;
     // 每样材料：一共买了多少、多买了多少、多买部分大约多少钱（按这样材料买入的平均单价算）
     const over = {};
     p.buys.forEach(b => { const o = (over[b.id] = over[b.id] || { q: 0, cost: 0, need: b.need }); o.q += b.q; o.cost += b.cost; });
@@ -928,17 +940,11 @@
         const q = bs.reduce((a, b) => a + b.q, 0);
         const usedW = [...new Set(p.buys.filter(b => b.id == id).map(b => b.w))];
         const o = over[id];
-        const others = usedW.filter(v => v !== w).map(v => {
-          const n2 = p.buys.filter(b => b.id == id && b.w === v).reduce((a, b) => a + b.q, 0);
-          return `${esc(v)} ${n2} 个`;
-        }).join('、');
-        const split = usedW.length > 1
-          ? `（一共需要 ${o.need} 个：这里 ${q} 个 + ${others}${o.extra ? `；整单买合计多 ${o.extra} 个，约 ${fmt(o.extraCost)} 金` : ''}）`
-          : o.extra ? `（需要 ${o.need} 个，多买 ${o.extra} 个，约 ${fmt(o.extraCost)} 金）` : '';
-        h += `<div class="buy"><div>${nm(id)} <b>×${q}</b>${split}
-            <div class="m">买 ${bs.length} 单：${bs.map(b => `${b.q} 个 × ${fmt(b.p)}${b.hq ? ' HQ' : ''}`).join('、')} · 挂单 ${ago(Math.max(...bs.map(b => b.t)))}看到的</div>
-            <div class="m">${backup(+id, bs[0].need, usedW)}</div></div>
-          <button class="gone" data-gone="${id}" data-w="${esc(w)}" title="到了这个服发现已经被别人买走了？点这里，会换下一家重新排路线">🔄 没货了？换一家</button></div>`;
+        const split = usedW.length > 1 ? `（共需 ${o.need}，其余在别的服）` : '';
+        const extra = o.extra && usedW.length === 1 ? ` <span class="xtra">多 ${o.extra} 个 ≈${fmt(o.extraCost)}</span>` : '';
+        h += `<div class="buy"><div>${nm(id)} <b>×${q}</b>${split}${extra}
+            <div class="m">${bs.map(b => `${b.q}×${fmt(b.p)}${b.hq ? ' HQ' : ''}`).join('、')} · ${ago(Math.max(...bs.map(b => b.t)))} · ${backup(+id, bs[0].need, usedW)}</div></div>
+          <button class="gone" data-gone="${id}" data-w="${esc(w)}" title="到了这个服发现已经被别人买走了？点这里，会换下一家重新排路线">🔄 换一家</button></div>`;
       });
       h += '</div>';
     });
@@ -946,22 +952,21 @@
       h += `<div class="warn">⚠ ${p.missing.map(m => nm(m.id)).join('、')} 在 ${esc(shop.dc)} 的挂单不够，买不齐。可以少做几次，或者自己采集 / 制作这个材料。</div>`;
     }
     const units = shop.times * x.n;
-    h += `<div class="total"><span>实际要花（已含 5% 税）</span><b>${fmt(p.total)} 金</b></div>`;
-    if (overCost >= 1) h += `<div class="sub" style="margin:4px 0 0">其中整单多买的部分：约 ${fmt(overCost)} 金</div>`;
+    h += `<div class="total"><span>实际要花${overCost >= 1 ? `（含多买的 ≈${fmt(overCost)}）` : ''}</span><b>${fmt(p.total)} 金</b></div>`;
     if (!p.missing.length) {
-      const per = p.total / units;
-      h += `<div class="sub" style="margin-top:4px">做出 ${units} 个，按实际花的钱算每个成本约 ${fmt(per)} 金；按 ${esc(S.dc)}${curWorld() ? ' · ' + esc(curWorld()) : ''} 的售价 ${fmt(x.price)} 算，扣税后每个${x.price * 0.95 - per >= 0 ? '约赚 ' + fmt(x.price * 0.95 - per) : '约亏 ' + fmt(per - x.price * 0.95)} 金。</div>`;
+      const per = p.total / units, gain = x.price * 0.95 - per;
+      h += `<div class="sub" style="margin:4px 0 0">做出 ${units} 个 · 每个成本 ${fmt(per)} · 卖 ${fmt(x.price)} · 每个${gain >= 0 ? '赚 ' + fmt(gain) : '亏 ' + fmt(-gain)}</div>`;
     }
     if (worst && overCost > p.total / 2) {
       const amt = x.ings.filter(([id]) => id === worst.id).reduce((a, [, n]) => a + n, 0);
       const k = Math.floor(worst.q / amt);
-      if (k > shop.times && k <= 99) h += `<div class="sub" style="margin-top:4px">做 ${k} 次正好能把这单${nm(worst.id)}用完，不会多买。</div>`;
+      if (k > shop.times && k <= 99) h += `<div class="sub" style="margin:4px 0 0">做 ${k} 次正好把这单${nm(worst.id)}用完。</div>`;
     }
-    h += `<div class="help">· 价格是打开清单时实时查的，但挂单要有人看过才会更新，到了现场以游戏里为准。<br>
-      · 到了发现被别人买走了：点那一行的“🔄 没货了？换一家”，会自动换下一家、重新排路线。“备选”是下一个最便宜的服。<br>
-      · 整个大区都买不齐：可以少做几次，或者自己采集 / 制作这个材料。<br>
-      · 游戏里挂单必须整单买，清单上显示的是整单的数量和价格，有时会比需要的多一些。<br>
-      · 服的顺序按花钱多少排，先去大头；实际先去哪个都行。</div>`;
+    h += `<details class="help"><summary>说明</summary>
+      · 价格是打开清单时实时查的，但挂单要有人看过才会更新，到了现场以游戏里为准。<br>
+      · 游戏里挂单必须整单买，所以有时会比需要的多一些；已含买家 5% 税。<br>
+      · “备选”是下一个最便宜的服；整个大区都买不齐时，可以少做几次或自己采集 / 制作。<br>
+      · 服的顺序按花钱多少排，实际先去哪个都行。</details>`;
     body.innerHTML = h;
   }
 
